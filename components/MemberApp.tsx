@@ -1,6 +1,6 @@
 "use client";
 /* eslint-disable jsx-a11y/no-autofocus, no-extra-boolean-cast, jsx-a11y/label-has-associated-control */
-import Link from "next/link";
+import { SafeLink as Link } from "@/components/SafeLink";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { missions, phases, products, sosItems } from "@/lib/content";
 

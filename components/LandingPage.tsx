@@ -2,7 +2,7 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 
 import Image from "next/image";
-import Link from "next/link";
+import { SafeLink as Link } from "@/components/SafeLink";
 import { useEffect, useState } from "react";
 import { phases } from "@/lib/content";
 

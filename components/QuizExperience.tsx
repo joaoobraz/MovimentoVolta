@@ -1,7 +1,7 @@
 "use client";
 /* eslint-disable react-hooks/set-state-in-effect, no-empty */
 
-import Link from "next/link";
+import { SafeLink as Link } from "@/components/SafeLink";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { calculateResult, quizQuestions } from "@/lib/content";
 

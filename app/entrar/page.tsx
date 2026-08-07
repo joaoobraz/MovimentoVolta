@@ -1,5 +1,5 @@
 "use client";
-import Link from "next/link";
+import { SafeLink as Link } from "@/components/SafeLink";
 import { FormEvent, useState } from "react";
 
 export default function LoginPage(){

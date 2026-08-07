@@ -1,6 +1,6 @@
 "use client";
 /* eslint-disable react-hooks/set-state-in-effect, react-hooks/immutability, jsx-a11y/label-has-associated-control, @typescript-eslint/no-unused-expressions */
-import Link from "next/link";
+import { SafeLink as Link } from "@/components/SafeLink";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { products } from "@/lib/content";
 
