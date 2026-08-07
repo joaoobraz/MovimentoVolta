@@ -53,6 +53,10 @@ async function syncUser(db: D1Database, identity: Identity) {
   await db.prepare(`UPDATE users SET email=?,name=?,status='active',deleted_at=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=?`).bind(identity.email, identity.name, identity.id).run();
   await db.prepare(`INSERT OR IGNORE INTO user_preferences (user_id) VALUES (?)`).bind(identity.id).run();
 
+  if (configuredTesterEmails().has(identity.email)) {
+    await db.batch(productIds.map(productId => db.prepare(`INSERT INTO user_access (id,user_id,product_id,status) VALUES (?,?,?,'active') ON CONFLICT(user_id,product_id) DO UPDATE SET status='active',expires_at=NULL,updated_at=CURRENT_TIMESTAMP`).bind(newId("test-access"), identity.id, productId)));
+  }
+
   const claims = await db.prepare(`SELECT product_id,purchase_id FROM entitlement_claims WHERE lower(email)=? AND status='active'`).bind(identity.email).all<JsonRecord>();
   if (claims.results.length) {
     const statements: D1PreparedStatement[] = [];
@@ -86,18 +90,26 @@ function catalogRow(row: JsonRecord) {
     price: Number(row.price_cents) / 100,
     access: String(row.description || ""),
     checkoutUrl: String(row.checkout_url || ""),
+    externalId: String(row.external_product_id || ""),
     status: String(row.status),
     position: Number(row.position || 0),
   };
 }
 
 async function getCatalog(db: D1Database, includeInactive = false) {
-  const rows = await db.prepare(`SELECT id,slug,name,price_cents,description,checkout_url,status,position FROM products WHERE deleted_at IS NULL ${includeInactive ? "" : "AND status='active'"} ORDER BY position,id`).all<JsonRecord>();
+  const rows = await db.prepare(`SELECT id,slug,name,price_cents,description,checkout_url,external_product_id,status,position FROM products WHERE deleted_at IS NULL ${includeInactive ? "" : "AND status='active'"} ORDER BY position,id`).all<JsonRecord>();
   return rows.results.map(catalogRow);
 }
 
 function configuredAdminEmails() {
   return new Set((process.env.ADMIN_EMAILS || "admin@demo.volta").split(",").map(value => value.trim().toLowerCase()).filter(Boolean));
+}
+
+function configuredTesterEmails() {
+  return new Set([
+    ...configuredAdminEmails(),
+    ...(process.env.TESTER_EMAILS || "").split(",").map(value => value.trim().toLowerCase()).filter(Boolean),
+  ]);
 }
 
 async function requireIdentity(request: Request, db: D1Database) {
@@ -197,6 +209,7 @@ export async function GET(request: Request) {
   ]);
   return json({
     user: identity,
+    isTester: configuredTesterEmails().has(identity.email),
     missions: missions.results,
     checkins: checkins.results,
     journal: journal.results,
@@ -242,7 +255,7 @@ export async function POST(request: Request) {
     if (!admin) return json({ error: "Acesso administrativo restrito." }, 403);
     if (action === "admin.products") {
       const items = Array.isArray(body.items) ? body.items as JsonRecord[] : [];
-      const statements = items.filter(item => productIds.includes(String(item.id) as typeof productIds[number])).map((item, index) => db.prepare(`UPDATE products SET name=?,price_cents=?,description=?,checkout_url=?,status=?,position=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`).bind(sanitizeText(item.name, 120), Math.max(0, Math.round(Number(item.price) * 100)), sanitizeText(item.access, 1000), sanitizeText(item.checkoutUrl, 500) || null, item.status === "inactive" ? "inactive" : "active", Number(item.position) || index + 1, String(item.id)));
+      const statements = items.filter(item => productIds.includes(String(item.id) as typeof productIds[number])).map((item, index) => db.prepare(`UPDATE products SET name=?,price_cents=?,description=?,checkout_url=?,external_product_id=?,status=?,position=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`).bind(sanitizeText(item.name, 120), Math.max(0, Math.round(Number(item.price) * 100)), sanitizeText(item.access, 1000), sanitizeText(item.checkoutUrl, 500) || null, sanitizeText(item.externalId, 180) || null, item.status === "inactive" ? "inactive" : "active", Number(item.position) || index + 1, String(item.id)));
       if (statements.length) await db.batch(statements);
       return json({ ok: true });
     }

@@ -40,7 +40,7 @@ export const utmTracking = sqliteTable("utm_tracking", {
 }, (t) => [index("idx_utm_lead").on(t.leadId), index("idx_utm_campaign").on(t.campaign)]);
 
 export const products = sqliteTable("products", {
-  id: id(), slug: text("slug").notNull(), name: text("name").notNull(), priceCents: integer("price_cents").notNull(), description: text("description"), checkoutUrl: text("checkout_url"), status: text("status").notNull().default("active"), position: integer("position").notNull().default(0), createdAt: timestamp("created_at"), updatedAt: timestamp("updated_at"), deletedAt: text("deleted_at"),
+  id: id(), slug: text("slug").notNull(), name: text("name").notNull(), priceCents: integer("price_cents").notNull(), description: text("description"), checkoutUrl: text("checkout_url"), externalProductId: text("external_product_id"), status: text("status").notNull().default("active"), position: integer("position").notNull().default(0), createdAt: timestamp("created_at"), updatedAt: timestamp("updated_at"), deletedAt: text("deleted_at"),
 }, (t) => [uniqueIndex("idx_products_slug").on(t.slug)]);
 export const purchases = sqliteTable("purchases", {
   id: id(), userId: text("user_id").references(() => users.id, { onDelete: "set null" }), leadId: text("lead_id").references(() => leads.id, { onDelete: "set null" }), productId: text("product_id").notNull(), gateway: text("gateway").notNull().default("simulation"), gatewayEventId: text("gateway_event_id"), amountCents: integer("amount_cents").notNull(), status: text("status").notNull().default("approved"), createdAt: timestamp("created_at"), updatedAt: timestamp("updated_at"), deletedAt: text("deleted_at"),

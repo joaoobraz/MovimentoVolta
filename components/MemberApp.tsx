@@ -7,11 +7,12 @@ import { missions, phases, profileContent, sosItems } from "@/lib/content";
 
 type Tab = "today" | "journey" | "sos" | "journal" | "community" | "profile";
 type Row = Record<string, unknown>;
-type Product = { id: string; name: string; price: number; access: string; checkoutUrl: string; status: string; position: number };
+type Product = { id: string; name: string; price: number; access: string; checkoutUrl: string; externalId?: string; status: string; position: number };
 type Personalization = { profileKey: keyof typeof profileContent; score: number; result: Row; desiredArea: string; weightArea: string; availableMinutes: number };
 type Preferences = { reminders_enabled: number; marketing_enabled: number; theme: string; text_size: string };
 type Snapshot = {
   user: { id: string; name: string; email: string };
+  isTester: boolean;
   missions: Row[];
   checkins: Row[];
   journal: Row[];
@@ -25,11 +26,17 @@ type Snapshot = {
 };
 
 const empty: Snapshot = {
-  user: { id: "", name: "", email: "" }, missions: [], checkins: [], journal: [], points: 0, access: [], personalization: null,
+  user: { id: "", name: "", email: "" }, isTester: false, missions: [], checkins: [], journal: [], points: 0, access: [], personalization: null,
   preferences: { reminders_enabled: 1, marketing_enabled: 0, theme: "light", text_size: "normal" }, products: [], posts: [], likedPostIds: [],
 };
 const nav: [Tab, string, string][] = [["today", "Hoje", "◉"], ["journey", "Jornada", "↗"], ["sos", "SOS", "+"], ["journal", "Diário", "□"], ["community", "Comunidade", "◎"], ["profile", "Perfil", "○"]];
 const journalPrompts = ["O que eu aceitei hoje, mas gostaria de ter recusado?", "O que eu fiz por mim?", "O que consumiu minha energia?", "O que posso simplificar amanhã?", "Qual pequena vitória quero registrar?", "O que estou adiando?", "O que eu gostaria de retomar?", "Qual limite preciso criar?"];
+const productJourney: Record<string, { label: string; promise: string; reason: string; cta: string }> = {
+  mapa: { label: "Comece com clareza", promise: "Transforme o diagnóstico em um plano curto e possível para os próximos 7 dias.", reason: "Clareza vira movimento quando o próximo passo é pequeno e específico.", cta: "Quero meu plano de 7 dias" },
+  sos: { label: "Proteja os dias difíceis", promise: "Tenha respostas práticas prontas para quando a sobrecarga apertar.", reason: "É mais fácil manter o compromisso quando seu plano B já está preparado.", cta: "Quero meu plano B" },
+  desafio: { label: "Crie continuidade", promise: "Veja 7 dias de pequenas ações, check-ins e progresso dentro da mesma conta.", reason: "Acompanhar o próprio avanço ajuda a intenção a virar consistência.", cta: "Quero viver os 7 dias" },
+  jornada: { label: "Consolide a mudança", promise: "Aprofunde o que funcionou com 30 dias, relatórios, diário e comunidade.", reason: "Uma jornada mais longa ajuda a proteger o espaço conquistado antes que a rotina antiga volte.", cta: "Quero avançar por 30 dias" },
+};
 
 function hasAny(access: Set<string>, ids: string[]) { return ids.some(id => access.has(id)); }
 function canOpen(tab: Tab, access: Set<string>) {
@@ -41,6 +48,7 @@ function canOpen(tab: Tab, access: Set<string>) {
 }
 function firstName(name: string) { return name.trim().split(/\s+/)[0] || "você"; }
 function offerHref(product: Product) { return product.checkoutUrl || `/entrar?produto=${encodeURIComponent(product.id)}`; }
+function nextProduct(products: Product[], access: Set<string>) { return products.find(product => !access.has(product.id)); }
 
 export function MemberApp() {
   const [tab, setTab] = useState<Tab>("today"), [data, setData] = useState<Snapshot>(empty), [loading, setLoading] = useState(true), [toast, setToast] = useState("");
@@ -91,6 +99,7 @@ export function MemberApp() {
       <a href="/signout-with-chatgpt?return_to=%2F" className="logout-link">← Sair da conta</a>
     </aside>
     <main className="app-main"><header className="app-topbar"><div><span className="mobile-brand">V</span><p>{tab === "today" ? "Seu espaço de hoje" : nav.find(item => item[0] === tab)?.[1]}</p></div><div className="top-stats"><span><b>{streak}</b> dias</span><span><b>{points}</b> pontos</span><button onClick={() => setLarge(!large)} aria-label="Aumentar texto">A+</button><button onClick={() => setDark(!dark)} aria-label="Alternar modo escuro">◐</button></div></header>
+      {data.isTester && <div className="tester-banner"><strong>Conta de teste</strong><span>Todos os produtos estão liberados para você conferir a experiência completa.</span></div>}
       {loading ? <div className="app-loading"><i/><p>Preparando seu espaço…</p></div> : <>
         {tab === "today" && (maxDays ? <Today data={data} mission={todayMission} day={currentDay} maxDays={maxDays} streak={streak} points={points} completed={completedIds.has(todayMission.id)} access={access} onComplete={completeMission} post={post} refresh={refresh} say={say} onNavigate={select}/> : <MemberWelcome data={data}/>) }
         {tab === "journey" && <Journey completedIds={completedIds} currentDay={currentDay} maxDays={maxDays} points={points} focus={focus} availableMinutes={availableMinutes} onComplete={completeMission}/>}
@@ -107,10 +116,22 @@ export function MemberApp() {
 
 function MemberWelcome({ data }: { data: Snapshot }) {
   const profile = data.personalization?.profileKey ? profileContent[data.personalization.profileKey] : null;
+  const access = new Set(data.access.filter(row => row.status === "active").map(row => String(row.product_id)));
+  const recommended = nextProduct(data.products, access);
   return <div className="app-view"><section className="welcome-row"><div><span className="eyebrow">Seu espaço individual</span><h1>Olá, {firstName(data.user.name)}.</h1><p>{profile ? `Seu diagnóstico indica o perfil ${profile.name}. Agora escolha o próximo passo que deseja liberar.` : "Faça o diagnóstico para receber uma recomendação alinhada à sua rotina."}</p></div></section>
     {profile && <section className="first-plan"><div><span className="eyebrow light">Seu ponto de partida</span><h2>{profile.message}</h2><p>{profile.description}</p></div></section>}
-    <section className="access-section"><div><span className="eyebrow">Ordem recomendada</span><h2>Uma etapa por vez, dentro da sua realidade.</h2></div><div>{data.products.map((product, index) => <article key={product.id}><span>{index + 1}. {product.name}</span><small>{product.access}</small><b>R$ {product.price.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</b><a className="button button-small" href={offerHref(product)}>{product.checkoutUrl ? "Quero este produto" : "Solicitar acesso"}</a></article>)}</div></section>
+    <section className="access-section journey-store"><div><span className="eyebrow">Ordem recomendada</span><h2>Uma etapa por vez, dentro da sua realidade.</h2><p>Você mantém tudo na mesma conta e escolhe quando deseja avançar.</p></div><div>{data.products.map((product, index) => { const copy = productJourney[product.id]; const acquired = access.has(product.id); const isRecommended = recommended?.id === product.id; return <article key={product.id} className={`${acquired ? "active" : ""} ${isRecommended ? "recommended" : ""}`}>
+      <em>{acquired ? "Etapa liberada" : isRecommended ? "Seu próximo passo" : `Etapa ${index + 1}`}</em><span>{index + 1}. {product.name}</span><small>{copy?.promise || product.access}</small><p>{copy?.reason}</p><b>{acquired ? "Acesso ativo" : `R$ ${product.price.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`}</b>{!acquired && <a className="button button-small" href={offerHref(product)}>{copy?.cta || "Quero este produto"}</a>}
+    </article>; })}</div></section>
   </div>;
+}
+
+function NextStepOffer({ data, access }: { data: Snapshot; access: Set<string> }) {
+  if (data.isTester) return null;
+  const product = nextProduct(data.products, access);
+  if (!product) return null;
+  const copy = productJourney[product.id];
+  return <section className="next-step-offer"><div><span className="eyebrow light">Recomendado para sua etapa</span><h2>{copy?.label || "Seu próximo passo"}</h2><p>{copy?.promise || product.access}</p><small>{copy?.reason}</small></div><div><strong>R$ {product.price.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</strong><a className="button button-light" href={offerHref(product)}>{copy?.cta || "Conhecer próxima etapa"}</a><span>Mesmo login · acesso individual</span></div></section>;
 }
 
 function Today({ data, mission, day, maxDays, streak, points, completed, access, onComplete, post, refresh, say, onNavigate }: { data: Snapshot; mission: typeof missions[number]; day: number; maxDays: number; streak: number; points: number; completed: boolean; access: Set<string>; onComplete: (id: string, response?: string) => Promise<void>; post: (body: Row) => Promise<unknown>; refresh: () => Promise<void>; say: (message: string) => void; onNavigate: (tab: Tab) => void }) {
@@ -122,6 +143,7 @@ function Today({ data, mission, day, maxDays, streak, points, completed, access,
     <section className="today-grid"><article className="daily-mission"><div className="mission-top"><span>Missão personalizada</span><span>{mission.minutes} min · {mission.difficulty}</span></div><h2>{mission.title}</h2><p>{mission.letter}</p><div className="mission-action"><span>Seu movimento</span><strong>{mission.action}</strong></div><button className="button" onClick={() => setMissionOpen(true)}>{completed ? "Refazer missão" : "Começar missão"}</button></article><div className="today-side"><article className="stat-card"><div><span>Sequência atual</span><strong>{streak} <small>dias</small></strong></div><div className="streak-dots">{Array.from({ length: 7 }, (_, index) => <i key={index} className={index < streak ? "done" : ""}>{index < streak ? "✓" : index + 1}</i>)}</div></article><article className="stat-pair"><div><span>Pontos</span><strong>{points}</strong><small>Próxima conquista: {Math.max(0, 100 - points)} pts</small></div><div><span>Progresso</span><strong>{Math.round((day - 1) / maxDays * 100)}%</strong><small>{day - 1} de {maxDays} missões</small></div></article></div></section>
     {checkinAllowed && <section className="checkin-section"><div><span className="eyebrow">Check-in diário</span><h2>Como você chega até aqui hoje?</h2><p>Um minuto para perceber seu humor e sua energia, sem julgamento.</p><button className="button button-secondary" onClick={() => setCheckin(true)}>{latest ? "Atualizar check-in" : "Fazer meu check-in"}</button></div><div className="checkin-visual"><div><span>Humor</span><strong>{["Muito baixo", "Baixo", "Estável", "Bem", "Muito bem"][mood - 1]}</strong><div className="meter"><i style={{ width: `${mood * 20}%` }}/></div></div><div><span>Energia</span><strong>{energy} de 5</strong><div className="meter energy"><i style={{ width: `${energy * 20}%` }}/></div></div>{weekly.length > 0 && <small>{weekly.length} registro(s) nos últimos dias</small>}</div></section>}
     <section className="quick-links">{canOpen("journal", access) && <button onClick={() => onNavigate("journal")}><span>□</span><div><strong>Registrar no diário</strong><small>Seu espaço é privado</small></div><i>→</i></button>}{canOpen("sos", access) && <button onClick={() => onNavigate("sos")}><span>+</span><div><strong>Preciso de uma sugestão SOS</strong><small>Uma ação de 5 minutos</small></div><i>→</i></button>}{canOpen("community", access) && <button onClick={() => onNavigate("community")}><span>◎</span><div><strong>Compartilhar uma pequena vitória</strong><small>Com a comunidade</small></div><i>→</i></button>}</section>
+    <NextStepOffer data={data} access={access}/>
     {missionOpen && <div className="modal-backdrop" role="dialog" aria-modal="true"><div className="modal"><button className="modal-close" onClick={() => setMissionOpen(false)}>×</button><span className="eyebrow">Dia {mission.day} · {mission.minutes} minutos</span><h2>{mission.title}</h2><p>{mission.letter}</p><div className="mission-action"><span>Missão prática</span><strong>{mission.action}</strong></div><label>O que você escolheu fazer?<textarea value={response} onChange={event => setResponse(event.target.value)} placeholder="Registre uma frase para você…"/></label><button className="button" onClick={async () => { await onComplete(mission.id, response); setMissionOpen(false); }}>Concluir e registrar +10</button><button className="text-button" onClick={() => speechSynthesis.speak(new SpeechSynthesisUtterance(`${mission.title}. ${mission.letter}. ${mission.action}`))}>◉ Ler conteúdo em voz alta</button></div></div>}
     {checkin && <CheckinModal latest={latest} onClose={() => setCheckin(false)} onSave={async values => { try { await post({ action: "checkin", ...values, date: new Date().toISOString().slice(0, 10) }); await refresh(); setCheckin(false); say("Check-in salvo no seu histórico."); } catch (error) { say(error instanceof Error ? error.message : "Não foi possível salvar."); } }}/>}
   </div>;

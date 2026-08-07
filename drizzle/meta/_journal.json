@@ -15,6 +15,13 @@
       "when": 1786096910614,
       "tag": "0001_yielding_hercules",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1786099477777,
+      "tag": "0002_gray_daimon_hellstrom",
+      "breakpoints": true
     }
   ]
 }

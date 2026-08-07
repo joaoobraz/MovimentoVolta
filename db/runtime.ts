@@ -16,7 +16,7 @@ const coreStatements = [
   `CREATE TABLE IF NOT EXISTS purchases (id TEXT PRIMARY KEY, user_id TEXT, lead_id TEXT, product_id TEXT NOT NULL, gateway TEXT NOT NULL DEFAULT 'simulation', gateway_event_id TEXT UNIQUE, amount_cents INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'approved', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, deleted_at TEXT)`,
   `CREATE TABLE IF NOT EXISTS user_access (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, product_id TEXT NOT NULL, purchase_id TEXT, status TEXT NOT NULL DEFAULT 'active', expires_at TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, UNIQUE(user_id, product_id))`,
   `CREATE TABLE IF NOT EXISTS entitlement_claims (id TEXT PRIMARY KEY, email TEXT NOT NULL, product_id TEXT NOT NULL, purchase_id TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'active', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, UNIQUE(email, product_id))`,
-  `CREATE TABLE IF NOT EXISTS products (id TEXT PRIMARY KEY, slug TEXT NOT NULL UNIQUE, name TEXT NOT NULL, price_cents INTEGER NOT NULL, description TEXT, checkout_url TEXT, status TEXT NOT NULL DEFAULT 'active', position INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, deleted_at TEXT)`,
+  `CREATE TABLE IF NOT EXISTS products (id TEXT PRIMARY KEY, slug TEXT NOT NULL UNIQUE, name TEXT NOT NULL, price_cents INTEGER NOT NULL, description TEXT, checkout_url TEXT, external_product_id TEXT, status TEXT NOT NULL DEFAULT 'active', position INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, deleted_at TEXT)`,
   `CREATE TABLE IF NOT EXISTS user_missions (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, mission_id TEXT NOT NULL, response TEXT, status TEXT NOT NULL DEFAULT 'started', first_completed_at TEXT, last_completed_at TEXT, completion_count INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, UNIQUE(user_id, mission_id))`,
   `CREATE TABLE IF NOT EXISTS daily_checkins (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, checkin_date TEXT NOT NULL, mood INTEGER NOT NULL, energy INTEGER NOT NULL, did_something_for_self INTEGER NOT NULL, victory TEXT, difficulty TEXT, wants_sos INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, UNIQUE(user_id, checkin_date))`,
   `CREATE TABLE IF NOT EXISTS journal_entries (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, prompt TEXT, body TEXT NOT NULL, tags_json TEXT, mood INTEGER, energy INTEGER, favorite INTEGER NOT NULL DEFAULT 0, entry_date TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, deleted_at TEXT)`,
@@ -50,10 +50,10 @@ export function ensureCoreDb(db = getD1()) {
 
 async function seedDemo(db: D1Database) {
   const productSeeds = [
-    ["mapa", "mapa", "Mapa da Volta", 1700, "DiagnÃ³stico completo, plano personalizado de 7 dias, diÃ¡rio bÃ¡sico e relatÃ³rio", 1],
-    ["sos", "sos", "Kit SOS Para Dias DifÃ­ceis", 2700, "Biblioteca SOS completa para momentos de sobrecarga", 2],
-    ["desafio", "desafio", "Desafio 7 Dias Sem Me Abandonar", 4700, "MissÃµes, check-ins e conquistas durante sete dias", 3],
-    ["jornada", "jornada", "Jornada VOLTA â€” 30 Dias", 14700, "Jornada completa, relatÃ³rios, comunidade e diÃ¡rio", 4],
+    ["mapa", "mapa", "Mapa da Volta", 1700, "Diagnóstico completo, plano personalizado de 7 dias, diário básico e relatório", 1],
+    ["sos", "sos", "Kit SOS Para Dias Difíceis", 2700, "Biblioteca SOS completa para momentos de sobrecarga", 2],
+    ["desafio", "desafio", "Desafio 7 Dias Sem Me Abandonar", 4700, "Missões, check-ins e conquistas durante sete dias", 3],
+    ["jornada", "jornada", "Jornada VOLTA — 30 Dias", 14700, "Jornada completa, relatórios, comunidade e diário", 4],
   ] as const;
   for (const product of productSeeds) {
     await db.prepare(`INSERT OR IGNORE INTO products (id,slug,name,price_cents,description,position) VALUES (?,?,?,?,?,?)`).bind(...product).run();
