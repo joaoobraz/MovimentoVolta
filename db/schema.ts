@@ -51,6 +51,9 @@ export const userAccess = sqliteTable("user_access", {
 export const entitlementClaims = sqliteTable("entitlement_claims", {
   id: id(), email: text("email").notNull(), productId: text("product_id").notNull(), purchaseId: text("purchase_id").notNull(), status: text("status").notNull().default("active"), createdAt: timestamp("created_at"), updatedAt: timestamp("updated_at"),
 }, (t) => [uniqueIndex("idx_claims_email_product").on(t.email, t.productId), index("idx_claims_email_status").on(t.email, t.status)]);
+export const authLoginTokens = sqliteTable("auth_login_tokens", {
+  id: id(), email: text("email").notNull(), tokenHash: text("token_hash").notNull(), expiresAt: text("expires_at").notNull(), usedAt: text("used_at"), createdAt: timestamp("created_at"),
+}, (t) => [uniqueIndex("idx_auth_login_token_hash").on(t.tokenHash), index("idx_auth_login_email_expires").on(t.email, t.expiresAt)]);
 
 export const journeys = sqliteTable("journeys", {
   id: id(), slug: text("slug").notNull(), name: text("name").notNull(), durationDays: integer("duration_days").notNull(), releaseMode: text("release_mode").notNull().default("daily"), status: text("status").notNull().default("active"), createdAt: timestamp("created_at"), updatedAt: timestamp("updated_at"),

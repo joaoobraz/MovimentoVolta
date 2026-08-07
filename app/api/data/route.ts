@@ -1,8 +1,9 @@
 import { ensureCoreDb, getD1, newId, sanitizeText } from "@/db/runtime";
+import { getSessionIdentityFromRequest, type SessionIdentity } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
-type Identity = { id: string; email: string; name: string };
+type Identity = SessionIdentity;
 type JsonRecord = Record<string, unknown>;
 
 const requestBuckets = new Map<string, { count: number; reset: number }>();
@@ -22,25 +23,6 @@ function rateLimited(request: Request) {
   }
   bucket.count += 1;
   return bucket.count > 120;
-}
-
-function safeDecode(value: string | null) {
-  if (!value) return null;
-  try { return decodeURIComponent(value); } catch { return null; }
-}
-
-function requestIdentity(request: Request): Identity | null {
-  const id = request.headers.get("oai-authenticated-user-id");
-  const email = request.headers.get("oai-authenticated-user-email")?.split(",")[0]?.trim().toLowerCase();
-  if (id && email) {
-    const encodedName = request.headers.get("oai-authenticated-user-full-name");
-    const name = request.headers.get("oai-authenticated-user-full-name-encoding") === "percent-encoded-utf-8"
-      ? safeDecode(encodedName)
-      : encodedName;
-    return { id, email, name: sanitizeText(name || email.split("@")[0], 100) };
-  }
-  if (process.env.DEMO_MODE === "true") return { id: "demo-maria", email: "maria@demo.volta", name: "Maria" };
-  return null;
 }
 
 async function syncUser(db: D1Database, identity: Identity) {
@@ -113,7 +95,7 @@ function configuredTesterEmails() {
 }
 
 async function requireIdentity(request: Request, db: D1Database) {
-  const identity = requestIdentity(request);
+  const identity = await getSessionIdentityFromRequest(request);
   if (!identity) return null;
   return syncUser(db, identity);
 }
@@ -235,7 +217,7 @@ export async function POST(request: Request) {
     const name = sanitizeText(body.name, 80), email = sanitizeText(body.email, 160).toLowerCase(), phone = sanitizeText(body.phone, 30);
     if (name.length < 2 || !/^\S+@\S+\.\S+$/.test(email) || phone.length < 8 || body.privacyConsent !== true) return json({ error: "Revise nome, e-mail, WhatsApp e aceite de privacidade." }, 400);
     const leadId = newId("lead"), attemptId = newId("quiz"), answers = (body.answers ?? {}) as Record<string, string>, result = (body.result ?? {}) as JsonRecord;
-    const signedIn = requestIdentity(request);
+    const signedIn = await getSessionIdentityFromRequest(request);
     const user = signedIn ? await syncUser(db, signedIn) : null;
     const answerStatements = Object.entries(answers).map(([questionId, answer]) => db.prepare(`INSERT INTO quiz_answers (id,attempt_id,question_id,answer) VALUES (?,?,?,?)`).bind(newId("answer"), attemptId, sanitizeText(questionId, 40), sanitizeText(answer, 200)));
     const utm = (body.utm ?? {}) as Record<string, string>;

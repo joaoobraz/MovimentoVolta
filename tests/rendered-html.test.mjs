@@ -44,3 +44,17 @@ test("mantém contas, produtos e jornadas individuais no código final", async (
   assert.match(schema, /userProfiles|userAccess|entitlementClaims|notificationOutbox/);
   assert.match(readme, /Contas individuais|Privacidade e segurança/);
 });
+
+test("usa login próprio por e-mail sem depender de conta externa", async () => {
+  const [loginPage, loginForm, auth, requestLink, verifyLink] = await Promise.all([
+    readFile(new URL("app/entrar/page.tsx", root), "utf8"),
+    readFile(new URL("components/EmailLoginForm.tsx", root), "utf8"),
+    readFile(new URL("lib/auth.ts", root), "utf8"),
+    readFile(new URL("app/api/auth/request-link/route.ts", root), "utf8"),
+    readFile(new URL("app/api/auth/verify/route.ts", root), "utf8"),
+  ]);
+  const source = [loginPage, loginForm, auth, requestLink, verifyLink].join("\n");
+  assert.match(source, /Enviar link de acesso|link mágico|createSignedSession/);
+  assert.match(source, /HttpOnly|SameSite=Lax/);
+  assert.doesNotMatch(source, /chatgpt|signin-with|oai-authenticated/i);
+});

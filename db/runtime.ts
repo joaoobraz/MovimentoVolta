@@ -16,6 +16,8 @@ const coreStatements = [
   `CREATE TABLE IF NOT EXISTS purchases (id TEXT PRIMARY KEY, user_id TEXT, lead_id TEXT, product_id TEXT NOT NULL, gateway TEXT NOT NULL DEFAULT 'simulation', gateway_event_id TEXT UNIQUE, amount_cents INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'approved', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, deleted_at TEXT)`,
   `CREATE TABLE IF NOT EXISTS user_access (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, product_id TEXT NOT NULL, purchase_id TEXT, status TEXT NOT NULL DEFAULT 'active', expires_at TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, UNIQUE(user_id, product_id))`,
   `CREATE TABLE IF NOT EXISTS entitlement_claims (id TEXT PRIMARY KEY, email TEXT NOT NULL, product_id TEXT NOT NULL, purchase_id TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'active', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, UNIQUE(email, product_id))`,
+  `CREATE TABLE IF NOT EXISTS auth_login_tokens (id TEXT PRIMARY KEY, email TEXT NOT NULL, token_hash TEXT NOT NULL UNIQUE, expires_at TEXT NOT NULL, used_at TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`,
+  `CREATE INDEX IF NOT EXISTS idx_auth_login_email_expires ON auth_login_tokens(email, expires_at)`,
   `CREATE TABLE IF NOT EXISTS products (id TEXT PRIMARY KEY, slug TEXT NOT NULL UNIQUE, name TEXT NOT NULL, price_cents INTEGER NOT NULL, description TEXT, checkout_url TEXT, external_product_id TEXT, status TEXT NOT NULL DEFAULT 'active', position INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, deleted_at TEXT)`,
   `CREATE TABLE IF NOT EXISTS user_missions (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, mission_id TEXT NOT NULL, response TEXT, status TEXT NOT NULL DEFAULT 'started', first_completed_at TEXT, last_completed_at TEXT, completion_count INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, UNIQUE(user_id, mission_id))`,
   `CREATE TABLE IF NOT EXISTS daily_checkins (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, checkin_date TEXT NOT NULL, mood INTEGER NOT NULL, energy INTEGER NOT NULL, did_something_for_self INTEGER NOT NULL, victory TEXT, difficulty TEXT, wants_sos INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, UNIQUE(user_id, checkin_date))`,
@@ -43,6 +45,10 @@ let initialization: Promise<void> | null = null;
 export function ensureCoreDb(db = getD1()) {
   initialization ??= (async () => {
     for (const sql of coreStatements) await db.prepare(sql).run();
+    const productColumns = await db.prepare(`PRAGMA table_info(products)`).all<{ name: string }>();
+    if (!productColumns.results.some(column => column.name === "external_product_id")) {
+      await db.prepare(`ALTER TABLE products ADD COLUMN external_product_id TEXT`).run();
+    }
     await seedDemo(db);
   })();
   return initialization;
@@ -57,6 +63,7 @@ async function seedDemo(db: D1Database) {
   ] as const;
   for (const product of productSeeds) {
     await db.prepare(`INSERT OR IGNORE INTO products (id,slug,name,price_cents,description,position) VALUES (?,?,?,?,?,?)`).bind(...product).run();
+    await db.prepare(`UPDATE products SET name=?,description=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND (name LIKE '%Ã%' OR name LIKE '%â%' OR description LIKE '%Ã%' OR description LIKE '%â%')`).bind(product[2], product[4], product[0]).run();
   }
   const automationSeeds = ["quiz_abandoned", "diagnosis_complete", "result_message", "welcome", "mission_reminder", "streak", "day_seven", "journey_invite", "checkout_recovery", "community_invite", "weekly_report"];
   for (const kind of automationSeeds) {
