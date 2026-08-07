@@ -30,4 +30,10 @@ html[data-theme="dark"]{--cream:#191316;--paper:#241a1e;--ink:#f4e9e7;--muted:#c
 
 @media print{.app-sidebar,.app-topbar,.bottom-nav,.settings-section,.access-section,.share-section,.profile-hero{display:none!important}.app-shell{display:block}.app-view{padding:0}.report-section{border:0}.report-grid{grid-template-columns:repeat(4,1fr)}}
 
+/* Individual accounts, persistent commerce and integration settings */
+.admin-login>section{width:min(520px,100%);background:var(--paper);border:1px solid var(--line);border-radius:24px;padding:32px;box-shadow:var(--shadow);display:grid;gap:16px}.admin-login>section p{color:var(--muted)}
+.product-editor label:nth-of-type(4){grid-column:1/-1}.product-editor input[type="url"]{font-size:.72rem}.access-section article .button{margin-top:10px;justify-self:start;opacity:1}
+.integration-card{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;background:#fff;border:1px solid var(--line);border-radius:16px;padding:20px;margin-top:12px}.integration-card label{display:grid;gap:6px;font-size:.68rem;font-weight:700}.integration-card input,.integration-card select{width:100%;border:1px solid var(--line);border-radius:12px;background:#fff;padding:12px;min-height:45px;color:var(--ink)}
+@media(max-width:760px){.bottom-nav{grid-template-columns:repeat(auto-fit,minmax(48px,1fr))}.integration-card{grid-template-columns:1fr}.admin-login>section{padding:24px}}
+
 @media(max-width:760px){.mission-detail{position:static;display:block;max-height:none;box-shadow:0 10px 40px rgba(0,0,0,.18)}}

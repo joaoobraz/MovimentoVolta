@@ -8,6 +8,13 @@ export const users = sqliteTable("users", {
   id: id(), email: text("email").notNull(), name: text("name").notNull(), phone: text("phone"), role: text("role").notNull().default("member"), status: text("status").notNull().default("active"), createdAt: timestamp("created_at"), updatedAt: timestamp("updated_at"), deletedAt: text("deleted_at"),
 }, (t) => [uniqueIndex("idx_users_email").on(t.email), index("idx_users_status").on(t.status)]);
 
+export const userProfiles = sqliteTable("user_profiles", {
+  userId: text("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }), profileKey: text("profile_key"), score: integer("score"), resultJson: text("result_json"), desiredArea: text("desired_area"), weightArea: text("weight_area"), availableMinutes: integer("available_minutes").notNull().default(15), quizAttemptId: text("quiz_attempt_id"), updatedAt: timestamp("updated_at"),
+});
+export const userPreferences = sqliteTable("user_preferences", {
+  userId: text("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }), remindersEnabled: integer("reminders_enabled", { mode: "boolean" }).notNull().default(true), marketingEnabled: integer("marketing_enabled", { mode: "boolean" }).notNull().default(false), theme: text("theme").notNull().default("light"), textSize: text("text_size").notNull().default("normal"), updatedAt: timestamp("updated_at"),
+});
+
 export const profiles = sqliteTable("profiles", {
   id: id(), slug: text("slug").notNull(), name: text("name").notNull(), message: text("message").notNull(), description: text("description"), createdAt: timestamp("created_at"), updatedAt: timestamp("updated_at"),
 }, (t) => [uniqueIndex("idx_profiles_slug").on(t.slug)]);
@@ -33,7 +40,7 @@ export const utmTracking = sqliteTable("utm_tracking", {
 }, (t) => [index("idx_utm_lead").on(t.leadId), index("idx_utm_campaign").on(t.campaign)]);
 
 export const products = sqliteTable("products", {
-  id: id(), slug: text("slug").notNull(), name: text("name").notNull(), priceCents: integer("price_cents").notNull(), description: text("description"), checkoutUrl: text("checkout_url"), status: text("status").notNull().default("active"), createdAt: timestamp("created_at"), updatedAt: timestamp("updated_at"), deletedAt: text("deleted_at"),
+  id: id(), slug: text("slug").notNull(), name: text("name").notNull(), priceCents: integer("price_cents").notNull(), description: text("description"), checkoutUrl: text("checkout_url"), status: text("status").notNull().default("active"), position: integer("position").notNull().default(0), createdAt: timestamp("created_at"), updatedAt: timestamp("updated_at"), deletedAt: text("deleted_at"),
 }, (t) => [uniqueIndex("idx_products_slug").on(t.slug)]);
 export const purchases = sqliteTable("purchases", {
   id: id(), userId: text("user_id").references(() => users.id, { onDelete: "set null" }), leadId: text("lead_id").references(() => leads.id, { onDelete: "set null" }), productId: text("product_id").notNull(), gateway: text("gateway").notNull().default("simulation"), gatewayEventId: text("gateway_event_id"), amountCents: integer("amount_cents").notNull(), status: text("status").notNull().default("approved"), createdAt: timestamp("created_at"), updatedAt: timestamp("updated_at"), deletedAt: text("deleted_at"),
@@ -41,6 +48,9 @@ export const purchases = sqliteTable("purchases", {
 export const userAccess = sqliteTable("user_access", {
   id: id(), userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }), productId: text("product_id").notNull(), purchaseId: text("purchase_id").references(() => purchases.id, { onDelete: "set null" }), status: text("status").notNull().default("active"), expiresAt: text("expires_at"), createdAt: timestamp("created_at"), updatedAt: timestamp("updated_at"),
 }, (t) => [uniqueIndex("idx_user_access_product").on(t.userId, t.productId), index("idx_user_access_status").on(t.status)]);
+export const entitlementClaims = sqliteTable("entitlement_claims", {
+  id: id(), email: text("email").notNull(), productId: text("product_id").notNull(), purchaseId: text("purchase_id").notNull(), status: text("status").notNull().default("active"), createdAt: timestamp("created_at"), updatedAt: timestamp("updated_at"),
+}, (t) => [uniqueIndex("idx_claims_email_product").on(t.email, t.productId), index("idx_claims_email_status").on(t.email, t.status)]);
 
 export const journeys = sqliteTable("journeys", {
   id: id(), slug: text("slug").notNull(), name: text("name").notNull(), durationDays: integer("duration_days").notNull(), releaseMode: text("release_mode").notNull().default("daily"), status: text("status").notNull().default("active"), createdAt: timestamp("created_at"), updatedAt: timestamp("updated_at"),
@@ -108,6 +118,9 @@ export const systemSettings = sqliteTable("system_settings", {
 export const automationSettings = sqliteTable("automation_settings", {
   id: id(), kind: text("kind").notNull(), enabled: integer("enabled", { mode: "boolean" }).notNull().default(false), requiresConsent: integer("requires_consent", { mode: "boolean" }).notNull().default(true), templateJson: text("template_json"), createdAt: timestamp("created_at"), updatedAt: timestamp("updated_at"),
 }, (t) => [uniqueIndex("idx_automation_kind").on(t.kind)]);
+export const notificationOutbox = sqliteTable("notification_outbox", {
+  id: id(), userId: text("user_id"), leadId: text("lead_id"), channel: text("channel").notNull(), kind: text("kind").notNull(), recipient: text("recipient").notNull(), payloadJson: text("payload_json").notNull(), status: text("status").notNull().default("pending"), createdAt: timestamp("created_at"), processedAt: text("processed_at"),
+}, (t) => [index("idx_outbox_status_created").on(t.status, t.createdAt)]);
 export const auditLogs = sqliteTable("audit_logs", {
   id: id(), actorId: text("actor_id"), action: text("action").notNull(), entityType: text("entity_type").notNull(), entityId: text("entity_id"), metadataJson: text("metadata_json"), createdAt: timestamp("created_at"), updatedAt: timestamp("updated_at"),
 }, (t) => [index("idx_audit_entity_created").on(t.entityType, t.createdAt)]);

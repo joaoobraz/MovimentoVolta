@@ -26,19 +26,21 @@ test("renderiza a landing final em português", async () => {
   assert.doesNotMatch(html, /codex-preview|SkeletonPreview|Your site is taking shape/);
 });
 
-test("mantém as jornadas essenciais no código final", async () => {
-  const [quiz, result, member, admin, schema, readme] = await Promise.all([
+test("mantém contas, produtos e jornadas individuais no código final", async () => {
+  const [quiz, result, member, admin, dataRoute, schema, readme] = await Promise.all([
     readFile(new URL("components/QuizExperience.tsx", root), "utf8"),
     readFile(new URL("components/ResultPage.tsx", root), "utf8"),
     readFile(new URL("components/MemberApp.tsx", root), "utf8"),
-    readFile(new URL("app/admin/page.tsx", root), "utf8"),
+    readFile(new URL("components/AdminDashboard.tsx", root), "utf8"),
+    readFile(new URL("app/api/data/route.ts", root), "utf8"),
     readFile(new URL("db/schema.ts", root), "utf8"),
     readFile(new URL("README.md", root), "utf8"),
   ]);
   assert.match(quiz, /quizQuestions\.length/);
-  assert.match(result, /purchase/);
+  assert.match(result, /checkoutHref|pagamento/);
   assert.match(member, /Diário|checkin|community/);
   assert.match(admin, /Gestão de leads|Automações/);
-  assert.match(schema, /journalEntries|userAccess|auditLogs|webhookEvents/);
-  assert.match(readme, /Acessos de demonstração|Privacidade e segurança/);
+  assert.match(dataRoute, /requireIdentity|canUse|admin\.access/);
+  assert.match(schema, /userProfiles|userAccess|entitlementClaims|notificationOutbox/);
+  assert.match(readme, /Contas individuais|Privacidade e segurança/);
 });

@@ -8,6 +8,13 @@
       "when": 1786088147818,
       "tag": "0000_lush_frank_castle",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1786096910614,
+      "tag": "0001_yielding_hercules",
+      "breakpoints": true
     }
   ]
 }

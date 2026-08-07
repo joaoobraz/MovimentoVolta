@@ -38,7 +38,7 @@ export function QuizExperience() {
     try {
       const response=await fetch("/api/data",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
       const data=await response.json() as {error?:string;leadId?:string}; if(!response.ok) throw new Error(data.error||"Não foi possível salvar seu diagnóstico.");
-      const stored={...result,name:lead.name,leadId:data.leadId,answers};
+      const stored={...result,name:lead.name,email:lead.email,leadId:data.leadId,answers};
       localStorage.setItem("volta-result",JSON.stringify(stored)); localStorage.removeItem("volta-quiz-draft"); window.location.href="/resultado";
     } catch(e) { setError(e instanceof Error?e.message:"Tente novamente."); setSubmitting(false); }
   }
