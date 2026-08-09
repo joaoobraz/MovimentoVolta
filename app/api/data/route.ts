@@ -1,5 +1,6 @@
 import { ensureCoreDb, getD1, newId, sanitizeText } from "@/db/runtime";
 import { getSessionIdentityFromRequest, type SessionIdentity } from "@/lib/auth";
+import { emailDeliveryConfigured } from "@/lib/email";
 
 export const dynamic = "force-dynamic";
 
@@ -72,6 +73,7 @@ function catalogRow(row: JsonRecord) {
     price: Number(row.price_cents) / 100,
     access: String(row.description || ""),
     checkoutUrl: String(row.checkout_url || ""),
+    bundleCheckoutUrl: String(row.bundle_checkout_url || ""),
     externalId: String(row.external_product_id || ""),
     status: String(row.status),
     position: Number(row.position || 0),
@@ -79,7 +81,7 @@ function catalogRow(row: JsonRecord) {
 }
 
 async function getCatalog(db: D1Database, includeInactive = false) {
-  const rows = await db.prepare(`SELECT id,slug,name,price_cents,description,checkout_url,external_product_id,status,position FROM products WHERE deleted_at IS NULL ${includeInactive ? "" : "AND status='active'"} ORDER BY position,id`).all<JsonRecord>();
+  const rows = await db.prepare(`SELECT id,slug,name,price_cents,description,checkout_url,bundle_checkout_url,external_product_id,status,position FROM products WHERE deleted_at IS NULL ${includeInactive ? "" : "AND status='active'"} ORDER BY position,id`).all<JsonRecord>();
   return rows.results.map(catalogRow);
 }
 
@@ -147,7 +149,7 @@ export async function GET(request: Request) {
       return json({ user, access: access.results });
     }
 
-    const [leadCount, userCount, attempts, purchases, missionsDone, activeUsers, profileRows, leadsRows, reportsRows, automations, integration] = await Promise.all([
+    const [leadCount, userCount, attempts, purchases, missionsDone, activeUsers, profileRows, leadsRows, reportsRows, automations, integration, funnelRows, catalog] = await Promise.all([
       db.prepare(`SELECT COUNT(*) AS total FROM leads WHERE deleted_at IS NULL`).first<{ total: number }>(),
       db.prepare(`SELECT COUNT(*) AS total FROM users WHERE deleted_at IS NULL`).first<{ total: number }>(),
       db.prepare(`SELECT COUNT(*) AS total FROM quiz_attempts WHERE status='completed'`).first<{ total: number }>(),
@@ -159,19 +161,37 @@ export async function GET(request: Request) {
       db.prepare(`SELECT r.id,r.reason,r.status,r.created_at,p.body FROM community_reports r LEFT JOIN community_posts p ON p.id=r.post_id ORDER BY r.created_at DESC`).all<JsonRecord>(),
       db.prepare(`SELECT kind,enabled,requires_consent,template_json FROM automation_settings ORDER BY kind`).all<JsonRecord>(),
       db.prepare(`SELECT value_json FROM system_settings WHERE key='integrations'`).first<{ value_json: string }>(),
+      db.prepare(`SELECT event_type,COUNT(*) AS total FROM funnel_events GROUP BY event_type`).all<JsonRecord>(),
+      getCatalog(db, true),
     ]);
     const completed = attempts?.total ?? 0;
-    const started = Math.max(completed, completed + 3);
+    const funnel = Object.fromEntries(funnelRows.results.map(row => [String(row.event_type), Number(row.total || 0)]));
+    const started = Math.max(completed, funnel.quiz_started || 0);
     const purchaseTotal = purchases?.total ?? 0;
+    const integrationValue = integration ? parseJson(integration.value_json) : { gateway: "", supportEmail: "", whatsapp: "" };
+    const catalogConfigured = catalog.filter(product => product.status === "active").every(product => product.checkoutUrl && product.externalId);
+    const legalConfigured = Boolean(process.env.BUSINESS_NAME && process.env.BUSINESS_DOCUMENT && process.env.BUSINESS_ADDRESS);
+    const supportConfigured = Boolean(integrationValue.supportEmail || process.env.SUPPORT_EMAIL);
+    const productionMode = process.env.DEMO_MODE !== "true";
     return json({
       viewer: admin,
-      metrics: { leads: leadCount?.total ?? 0, users: userCount?.total ?? 0, quizStarted: started, quizCompleted: completed, completionRate: started ? Math.round(completed / started * 100) : 0, revenue: (purchases?.revenue ?? 0) / 100, ticket: purchaseTotal ? (purchases?.revenue ?? 0) / purchaseTotal / 100 : 0, missions: missionsDone?.total ?? 0, activeUsers: activeUsers?.total ?? 0 },
+      metrics: { leads: leadCount?.total ?? 0, users: userCount?.total ?? 0, quizStarted: started, quizCompleted: completed, resultViewed: funnel.result_viewed || 0, checkoutClicked: funnel.checkout_clicked || 0, purchases: purchaseTotal, completionRate: started ? Math.round(completed / started * 100) : 0, salesConversion: completed ? Math.round(purchaseTotal / completed * 100) : 0, revenue: (purchases?.revenue ?? 0) / 100, ticket: purchaseTotal ? (purchases?.revenue ?? 0) / purchaseTotal / 100 : 0, missions: missionsDone?.total ?? 0, activeUsers: activeUsers?.total ?? 0 },
       profiles: profileRows.results,
       leads: leadsRows.results,
       reports: reportsRows.results,
-      products: await getCatalog(db, true),
+      products: catalog,
       automations: automations.results,
-      integration: integration ? parseJson(integration.value_json) : { gateway: "", supportEmail: "", whatsapp: "" },
+      integration: integrationValue,
+      readiness: {
+        productionMode,
+        emailConfigured: emailDeliveryConfigured() && Boolean(process.env.AUTH_SESSION_SECRET),
+        wiapyConfigured: Boolean(process.env.WIAPY_WEBHOOK_TOKEN),
+        catalogConfigured,
+        bundleConfigured: Boolean(catalog.find(product => product.id === "mapa")?.bundleCheckoutUrl),
+        legalConfigured,
+        supportConfigured,
+        ready: productionMode && emailDeliveryConfigured() && Boolean(process.env.AUTH_SESSION_SECRET && process.env.WIAPY_WEBHOOK_TOKEN) && catalogConfigured && legalConfigured && supportConfigured,
+      },
     });
   }
 
@@ -213,6 +233,24 @@ export async function POST(request: Request) {
   const action = String(body.action ?? "");
   const now = new Date().toISOString();
 
+  if (action === "funnel") {
+    const allowed = new Set(["quiz_started", "result_viewed", "checkout_clicked", "thank_you_viewed"]);
+    const eventType = sanitizeText(body.eventType, 60);
+    if (!allowed.has(eventType)) return json({ error: "Evento inválido." }, 400);
+    const email = sanitizeText(body.email, 160).toLowerCase();
+    await db.prepare(`INSERT OR IGNORE INTO funnel_events (id,event_type,lead_id,email,product_id,profile_key,metadata_json,created_at) VALUES (?,?,?,?,?,?,?,?)`).bind(
+      sanitizeText(body.eventId, 140) || newId("funnel"),
+      eventType,
+      sanitizeText(body.leadId, 140) || null,
+      /^\S+@\S+\.\S+$/.test(email) ? email : null,
+      sanitizeText(body.productId, 60) || null,
+      sanitizeText(body.profileKey, 60) || null,
+      JSON.stringify({ path: sanitizeText(body.path, 300), source: sanitizeText(body.source, 100) }),
+      now,
+    ).run();
+    return json({ ok: true });
+  }
+
   if (action === "lead") {
     const name = sanitizeText(body.name, 80), email = sanitizeText(body.email, 160).toLowerCase(), phone = sanitizeText(body.phone, 30);
     if (name.length < 2 || !/^\S+@\S+\.\S+$/.test(email) || phone.length < 8 || body.privacyConsent !== true) return json({ error: "Revise nome, e-mail, WhatsApp e aceite de privacidade." }, 400);
@@ -226,6 +264,7 @@ export async function POST(request: Request) {
       db.prepare(`INSERT INTO quiz_attempts (id,lead_id,user_id,profile_key,score,result_json,status,completed_at) VALUES (?,?,?,?,?,?,'completed',?)`).bind(attemptId, leadId, user?.id || null, sanitizeText(body.profile, 40), Number(body.score) || 0, JSON.stringify(result), now),
       db.prepare(`INSERT INTO utm_tracking (id,lead_id,utm_source,utm_medium,utm_campaign,utm_content,utm_term,landing_url) VALUES (?,?,?,?,?,?,?,?)`).bind(newId("utm"), leadId, sanitizeText(utm.utm_source, 100), sanitizeText(utm.utm_medium, 100), sanitizeText(utm.utm_campaign, 100), sanitizeText(utm.utm_content, 100), sanitizeText(utm.utm_term, 100), sanitizeText(body.landingUrl, 500)),
       ...answerStatements,
+      db.prepare(`INSERT INTO funnel_events (id,event_type,lead_id,user_id,email,profile_key,metadata_json,created_at) VALUES (?,'quiz_completed',?,?,?,?,?,?)`).bind(newId("funnel"), leadId, user?.id || null, email, sanitizeText(body.profile, 40), JSON.stringify({ landingUrl: sanitizeText(body.landingUrl, 500) }), now),
       db.prepare(`INSERT INTO audit_logs (id,actor_id,action,entity_type,entity_id) VALUES (?,?,?,?,?)`).bind(newId("audit"), user?.id || leadId, "quiz.completed", "quiz_attempt", attemptId),
     ]);
     await queueAutomation(db, "result_message", email, { name, profile: body.profile, score: body.score }, body.marketingConsent === true, leadId, user?.id);
@@ -237,7 +276,7 @@ export async function POST(request: Request) {
     if (!admin) return json({ error: "Acesso administrativo restrito." }, 403);
     if (action === "admin.products") {
       const items = Array.isArray(body.items) ? body.items as JsonRecord[] : [];
-      const statements = items.filter(item => productIds.includes(String(item.id) as typeof productIds[number])).map((item, index) => db.prepare(`UPDATE products SET name=?,price_cents=?,description=?,checkout_url=?,external_product_id=?,status=?,position=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`).bind(sanitizeText(item.name, 120), Math.max(0, Math.round(Number(item.price) * 100)), sanitizeText(item.access, 1000), sanitizeText(item.checkoutUrl, 500) || null, sanitizeText(item.externalId, 180) || null, item.status === "inactive" ? "inactive" : "active", Number(item.position) || index + 1, String(item.id)));
+      const statements = items.filter(item => productIds.includes(String(item.id) as typeof productIds[number])).map((item, index) => db.prepare(`UPDATE products SET name=?,price_cents=?,description=?,checkout_url=?,bundle_checkout_url=?,external_product_id=?,status=?,position=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`).bind(sanitizeText(item.name, 120), Math.max(0, Math.round(Number(item.price) * 100)), sanitizeText(item.access, 1000), sanitizeText(item.checkoutUrl, 500) || null, sanitizeText(item.bundleCheckoutUrl, 500) || null, sanitizeText(item.externalId, 180) || null, item.status === "inactive" ? "inactive" : "active", Number(item.position) || index + 1, String(item.id)));
       if (statements.length) await db.batch(statements);
       return json({ ok: true });
     }
@@ -340,9 +379,19 @@ export async function POST(request: Request) {
     return json({ ok: true });
   }
   if (action === "account.delete") {
+    const anonymizedEmail = `deleted-${crypto.randomUUID()}@volta.invalid`;
     await db.batch([
-      db.prepare(`UPDATE users SET status='deleted',deleted_at=? WHERE id=?`).bind(now, identity.id),
-      db.prepare(`UPDATE journal_entries SET deleted_at=? WHERE user_id=?`).bind(now, identity.id),
+      db.prepare(`UPDATE users SET email=?,name='Conta excluída',phone=NULL,status='deleted',deleted_at=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`).bind(anonymizedEmail, now, identity.id),
+      db.prepare(`DELETE FROM user_profiles WHERE user_id=?`).bind(identity.id),
+      db.prepare(`DELETE FROM user_preferences WHERE user_id=?`).bind(identity.id),
+      db.prepare(`DELETE FROM journal_entries WHERE user_id=?`).bind(identity.id),
+      db.prepare(`DELETE FROM daily_checkins WHERE user_id=?`).bind(identity.id),
+      db.prepare(`DELETE FROM user_sos_actions WHERE user_id=?`).bind(identity.id),
+      db.prepare(`DELETE FROM points_history WHERE user_id=?`).bind(identity.id),
+      db.prepare(`DELETE FROM user_missions WHERE user_id=?`).bind(identity.id),
+      db.prepare(`DELETE FROM community_likes WHERE user_id=?`).bind(identity.id),
+      db.prepare(`DELETE FROM community_reports WHERE reporter_id=?`).bind(identity.id),
+      db.prepare(`UPDATE community_posts SET anonymous=1,updated_at=CURRENT_TIMESTAMP WHERE user_id=?`).bind(identity.id),
       db.prepare(`UPDATE user_access SET status='revoked',updated_at=CURRENT_TIMESTAMP WHERE user_id=?`).bind(identity.id),
       db.prepare(`INSERT INTO audit_logs (id,actor_id,action,entity_type,entity_id) VALUES (?,?,?,?,?)`).bind(newId("audit"), identity.id, "account.deleted", "user", identity.id),
     ]);

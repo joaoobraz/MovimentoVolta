@@ -62,7 +62,8 @@ export function calculateResult(answers: Record<string, string>) {
   let profile = normalized.sort((a,b)=>b.value-a.value)[0].key;
   if (overall < 42) profile = "retomada";
   const areaScores = Object.fromEntries(Object.entries(areas).map(([name, values]) => [name, Math.round((values.reduce((a,b)=>a+b,0) / values.length / 4) * 100)]));
-  return { profile, score: overall, areas: areaScores, weight: answers.peso ?? "Rotina", desired: answers.retomar ?? "Tempo para mim" };
+  const availableMinutes = Math.min(30, Math.max(5, Number.parseInt(answers.tempo || "15", 10) || 15));
+  return { profile, score: overall, areas: areaScores, weight: answers.peso ?? "Rotina", desired: answers.retomar ?? "Tempo para mim", availableMinutes };
 }
 
 export const phases = [

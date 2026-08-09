@@ -1,9 +1,10 @@
 import { ensureCoreDb, getD1, newId, sanitizeText } from "@/db/runtime";
+import { emailFrame, escapeHtml, sendEmail } from "@/lib/email";
 
 export const dynamic = "force-dynamic";
 
 type JsonRecord = Record<string, unknown>;
-type ProductRow = { id: string; price_cents: number };
+type ProductRow = { id: string; name: string; price_cents: number };
 
 async function sha256(value: string) {
   const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
@@ -42,7 +43,7 @@ async function validSignature(request: Request, gateway: string, raw: string) {
 async function resolveProducts(db: D1Database, gateway: string, payload: JsonRecord, genericProductId: string) {
   if (gateway !== "wiapy") {
     if (!genericProductId) return [] as ProductRow[];
-    const product = await db.prepare(`SELECT id,price_cents FROM products WHERE id=? AND status='active'`).bind(genericProductId).first<ProductRow>();
+    const product = await db.prepare(`SELECT id,name,price_cents FROM products WHERE id=? AND status='active'`).bind(genericProductId).first<ProductRow>();
     return product ? [product] : [];
   }
 
@@ -51,7 +52,7 @@ async function resolveProducts(db: D1Database, gateway: string, payload: JsonRec
   for (const item of webhookProducts) {
     const externalId = sanitizeText(item.id, 180);
     const title = sanitizeText(item.title, 180);
-    const product = await db.prepare(`SELECT id,price_cents FROM products WHERE status='active' AND ((external_product_id IS NOT NULL AND external_product_id=?) OR lower(name)=lower(?)) LIMIT 1`).bind(externalId, title).first<ProductRow>();
+    const product = await db.prepare(`SELECT id,name,price_cents FROM products WHERE status='active' AND ((external_product_id IS NOT NULL AND external_product_id=?) OR lower(name)=lower(?)) LIMIT 1`).bind(externalId, title).first<ProductRow>();
     if (product) matched.set(product.id, product);
   }
   return [...matched.values()];
@@ -111,7 +112,19 @@ export async function POST(request: Request, context: { params: Promise<{ gatewa
     const products = await resolveProducts(db, gateway, payload, genericProductId);
     if (!products.length) return Response.json({ error: gateway === "wiapy" ? "Produto da Wiapy ainda não vinculado no painel." : "Produto não reconhecido." }, { status: 422 });
     let linkedToAccount = false;
-    for (const product of products) linkedToAccount = await grantProduct(db, gateway, paymentId, email, products.length === 1 ? amountCents : product.price_cents) || linkedToAccount;
+    for (const product of products) linkedToAccount = await grantProduct(db, gateway, paymentId, email, products.length === 1 ? amountCents : product.price_cents, product) || linkedToAccount;
+    await db.prepare(`INSERT INTO funnel_events (id,event_type,user_id,email,product_id,metadata_json) VALUES (?,'purchase_approved',(SELECT id FROM users WHERE lower(email)=? LIMIT 1),?,?,?)`).bind(newId("funnel"), email, email, products.map(product => product.id).join("+"), JSON.stringify({ gateway, paymentMethod: sanitizeText(payment.method, 40) })).run();
+    const origin = (process.env.NEXT_PUBLIC_SITE_URL || new URL(request.url).origin).replace(/\/$/, "");
+    const accessUrl = `${origin}/entrar?email=${encodeURIComponent(email)}`;
+    const productNames = products.map(product => product.name).join(", ");
+    const delivery = await sendEmail({
+      to: email,
+      subject: "Pagamento aprovado — seu acesso está disponível",
+      html: emailFrame("Sua compra foi aprovada.", `Seu acesso a <strong>${escapeHtml(productNames)}</strong> já está disponível. Entre com o mesmo e-mail usado na compra; enviaremos um link pessoal e temporário.`, "Acessar meus produtos", accessUrl),
+      text: `Sua compra foi aprovada. Produtos liberados: ${productNames}. Acesse: ${accessUrl}`,
+      idempotencyKey: `volta-purchase-${gateway}-${paymentId}`,
+    });
+    if (!delivery.ok) await db.prepare(`INSERT INTO notification_outbox (id,channel,kind,recipient,payload_json,status) VALUES (?,'email','purchase_access',?,?, 'pending')`).bind(newId("notify"), email, JSON.stringify({ paymentId, products: products.map(product => product.id), accessUrl, lastError: delivery.error })).run();
     processingStatus = linkedToAccount ? "access_granted" : "claim_created";
   } else if (reversed) {
     const purchases = gateway === "wiapy"

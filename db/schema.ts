@@ -40,7 +40,7 @@ export const utmTracking = sqliteTable("utm_tracking", {
 }, (t) => [index("idx_utm_lead").on(t.leadId), index("idx_utm_campaign").on(t.campaign)]);
 
 export const products = sqliteTable("products", {
-  id: id(), slug: text("slug").notNull(), name: text("name").notNull(), priceCents: integer("price_cents").notNull(), description: text("description"), checkoutUrl: text("checkout_url"), externalProductId: text("external_product_id"), status: text("status").notNull().default("active"), position: integer("position").notNull().default(0), createdAt: timestamp("created_at"), updatedAt: timestamp("updated_at"), deletedAt: text("deleted_at"),
+  id: id(), slug: text("slug").notNull(), name: text("name").notNull(), priceCents: integer("price_cents").notNull(), description: text("description"), checkoutUrl: text("checkout_url"), bundleCheckoutUrl: text("bundle_checkout_url"), externalProductId: text("external_product_id"), status: text("status").notNull().default("active"), position: integer("position").notNull().default(0), createdAt: timestamp("created_at"), updatedAt: timestamp("updated_at"), deletedAt: text("deleted_at"),
 }, (t) => [uniqueIndex("idx_products_slug").on(t.slug)]);
 export const purchases = sqliteTable("purchases", {
   id: id(), userId: text("user_id").references(() => users.id, { onDelete: "set null" }), leadId: text("lead_id").references(() => leads.id, { onDelete: "set null" }), productId: text("product_id").notNull(), gateway: text("gateway").notNull().default("simulation"), gatewayEventId: text("gateway_event_id"), amountCents: integer("amount_cents").notNull(), status: text("status").notNull().default("approved"), createdAt: timestamp("created_at"), updatedAt: timestamp("updated_at"), deletedAt: text("deleted_at"),
@@ -130,3 +130,6 @@ export const auditLogs = sqliteTable("audit_logs", {
 export const webhookEvents = sqliteTable("webhook_events", {
   id: id(), gateway: text("gateway").notNull(), externalId: text("external_id").notNull(), eventType: text("event_type").notNull(), payloadHash: text("payload_hash").notNull(), status: text("status").notNull().default("received"), processedAt: text("processed_at"), createdAt: timestamp("created_at"), updatedAt: timestamp("updated_at"),
 }, (t) => [uniqueIndex("idx_webhook_gateway_event").on(t.gateway, t.externalId)]);
+export const funnelEvents = sqliteTable("funnel_events", {
+  id: id(), eventType: text("event_type").notNull(), leadId: text("lead_id"), userId: text("user_id"), email: text("email"), productId: text("product_id"), profileKey: text("profile_key"), metadataJson: text("metadata_json"), createdAt: timestamp("created_at"),
+}, (t) => [index("idx_funnel_event_created").on(t.eventType, t.createdAt), index("idx_funnel_lead_created").on(t.leadId, t.createdAt), index("idx_funnel_email_created").on(t.email, t.createdAt)]);

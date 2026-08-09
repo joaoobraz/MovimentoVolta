@@ -33,7 +33,7 @@ export async function generateMetadata(): Promise<Metadata> {
   openGraph: {
     title: "Movimento Volta Pra Você",
     description: "30 dias para parar de se abandonar e voltar a se reconhecer.",
-    images: [{ url: "/og.png", width: 1664, height: 935, alt: "Movimento Volta Pra Você — Eu não me abandono mais." }],
+    images: [{ url: "/og-premium.png", width: 1672, height: 941, alt: "Movimento Volta Pra Você — Eu não me abandono mais." }],
     locale: "pt_BR",
     type: "website",
   },
@@ -41,7 +41,7 @@ export async function generateMetadata(): Promise<Metadata> {
     card: "summary_large_image",
     title: "Movimento Volta Pra Você",
     description: "Eu não me abandono mais.",
-    images: ["/og.png"],
+    images: ["/og-premium.png"],
   },
   };
 }

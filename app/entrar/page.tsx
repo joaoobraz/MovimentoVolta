@@ -4,8 +4,9 @@ import { SafeLink as Link } from "@/components/SafeLink";
 
 export const dynamic = "force-dynamic";
 
-export default async function LoginPage(){
+export default async function LoginPage({ searchParams }: { searchParams: Promise<{ email?: string }> }){
   const user = await getSessionUser();
+  const requestedEmail = String((await searchParams).email || "").slice(0, 160);
   const demo = process.env.DEMO_MODE === "true";
   return <main className="auth-shell">
     <section className="auth-brand-panel">
@@ -30,7 +31,7 @@ export default async function LoginPage(){
           <div className="secure-note">✓ Todos os produtos estão liberados para teste<br/>✓ Sair da conta encerra esta sessão local</div>
         </> : <>
           <p>Digite o mesmo e-mail usado na compra. Você receberá um link seguro, sem precisar criar ou lembrar uma senha.</p>
-          <EmailLoginForm/>
+          <EmailLoginForm defaultEmail={requestedEmail}/>
           <div className="secure-note">✓ Nenhuma senha é armazenada pela plataforma<br/>✓ Cada cliente vê somente os produtos comprados</div>
         </>}
       </>}

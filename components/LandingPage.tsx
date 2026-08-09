@@ -18,13 +18,16 @@ const faqs = [
   ["Meus dados e respostas são privados?", "Sim. O diário é privado e nunca é publicado na comunidade. Você controla consentimentos e pode solicitar exclusão."],
   ["Posso fazer no meu ritmo?", "Sim. Missões anteriores permanecem acessíveis e a liberação pode ser diária ou livre."],
 ];
+type Product = { id: string; name: string; price: number; access: string; position: number };
 
 export function LandingPage() {
   const [menu, setMenu] = useState(false);
   const [cookies, setCookies] = useState(false);
   const [largeText, setLargeText] = useState(false);
   const [dark, setDark] = useState(false);
+  const [products, setProducts] = useState<Product[]>([]);
   useEffect(() => { setCookies(localStorage.getItem("volta-cookies") !== "accepted"); }, []);
+  useEffect(() => { fetch("/api/data?mode=catalog").then(response => response.json() as Promise<{ products: Product[] }>).then(data => setProducts(data.products || [])).catch(() => undefined); }, []);
   useEffect(() => { document.documentElement.dataset.theme = dark ? "dark" : "light"; document.documentElement.dataset.text = largeText ? "large" : "normal"; }, [dark, largeText]);
   const speak = () => {
     speechSynthesis.cancel();
@@ -70,13 +73,13 @@ export function LandingPage() {
         <div className="pillar-grid">{[["01","Uma pequena ação por dia"],["02","Uma rotina que cabe na vida real"],["03","Uma comunidade de mulheres em retomada"]].map(([n,t])=><article className="pillar" key={n}><span>{n}</span><h3>{t}</h3></article>)}</div>
       </section>
 
-      <section className="steps-section section-pad"><div className="section-heading compact"><span className="eyebrow">Como funciona</span><h2>Da descoberta ao primeiro movimento.</h2></div><div className="steps-row">{["Faça o diagnóstico","Descubra seu perfil","Receba seu primeiro plano","Comece sua jornada"].map((s,i)=><div className="step" key={s}><span>{i+1}</span><p>{s}</p>{i<3&&<i aria-hidden>→</i>}</div>)}</div></section>
+      <section className="steps-section section-pad"><div className="section-heading compact"><span className="eyebrow">Como funciona</span><h2>Da descoberta ao primeiro movimento.</h2></div><div className="steps-row">{["Faça o diagnóstico","Descubra seu perfil","Receba seu primeiro plano","Comece sua jornada"].map((s,i)=><div className="step" key={s}><span>{i+1}</span><p>{s}</p>{i<3&&<i aria-hidden>→</i>}</div>)}</div><div className="trust-strip"><span>Experiência individual por perfil</span><span>Acesso pelo e-mail da compra</span><span>Diário privado por padrão</span><span>7 dias para arrependimento online</span></div></section>
 
       <section className="benefits-section section-pad"><div className="benefit-intro"><span className="eyebrow">Espaço possível</span><h2>Pequenos movimentos que devolvem presença à sua rotina.</h2><p>Sem prometer transformar tudo de uma vez. O foco é perceber, escolher e agir com constância.</p></div><div className="benefit-list">{benefits.map((b,i)=><div key={b}><span>0{i+1}</span>{b}</div>)}</div></section>
 
       <section className="method-section section-pad" id="metodo"><div className="section-heading"><span className="eyebrow light">Método VOLTA</span><h2>Cinco movimentos para voltar a ocupar espaço na própria vida.</h2></div><div className="method-track">{phases.map((p)=><article key={p.letter}><span className="method-letter">{p.letter}</span><div><h3>{p.name}</h3><p>{p.description}</p></div></article>)}</div></section>
 
-      <section className="stories-section section-pad"><div><span className="eyebrow">Histórias do movimento</span><h2>Resultados reais precisam de tempo — e de mulheres reais.</h2></div><div className="empty-story"><span>“</span><p>Em breve, histórias das primeiras mulheres do movimento.</p><small>Nenhum depoimento fictício por aqui.</small></div></section>
+      <section className="product-ladder section-pad" id="produtos"><div className="section-heading"><span className="eyebrow">Uma esteira, uma só conta</span><h2>Comece pequeno. Avance quando a próxima etapa fizer sentido.</h2><p>Você não compra aplicativos diferentes. Cada produto libera uma parte da mesma experiência e preserva o perfil, o progresso e os registros da cliente.</p></div><div className="ladder-grid">{products.map((product, index) => <article key={product.id}><em>{index === 0 ? "Primeiro passo" : `Etapa ${index + 1}`}</em><span>{String(index + 1).padStart(2, "0")}</span><h3>{product.name}</h3><p>{product.access}</p><strong>R$ {product.price.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</strong><Link href="/quiz">Descobrir meu perfil →</Link></article>)}</div><div className="evidence-card"><div><span className="eyebrow light">Confiança antes da pressa</span><h3>Sem depoimentos inventados, contadores falsos ou promessas impossíveis.</h3></div><p>A recomendação nasce das respostas do quiz. Preços, entregáveis e acesso são mostrados com clareza antes da compra.</p></div></section>
 
       <section className="quiz-cta section-pad"><span className="eyebrow light">Seu primeiro passo</span><h2>Antes de mudar sua rotina, descubra onde você se deixou para depois.</h2><Link href="/quiz" className="button button-light">Começar diagnóstico gratuito</Link><p>Gratuito · privado · menos de 3 minutos</p></section>
 

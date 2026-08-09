@@ -1,4 +1,4 @@
-import { ensureCoreDb, getD1, sanitizeText } from "@/db/runtime";
+import { ensureCoreDb, getD1, newId, sanitizeText } from "@/db/runtime";
 import { createSignedSession, hashLoginToken, identityIdForEmail, sessionCookie } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
@@ -36,6 +36,7 @@ export async function GET(request: Request) {
   }
 
   try {
+    await db.prepare(`INSERT INTO funnel_events (id,event_type,user_id,email,metadata_json) VALUES (?,'login_completed',?,?,?)`).bind(newId("funnel"), user.id, email, JSON.stringify({ method: "magic_link" })).run();
     const signedSession = await createSignedSession({ id: user.id, email: user.email, name: user.name });
     return new Response(null, {
       status: 303,

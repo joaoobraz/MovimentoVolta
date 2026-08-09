@@ -2,12 +2,11 @@
 
 import { FormEvent, useState } from "react";
 
-export function EmailLoginForm() {
-  const [email, setEmail] = useState("");
+export function EmailLoginForm({ defaultEmail = "" }: { defaultEmail?: string }) {
+  const [email, setEmail] = useState(defaultEmail);
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState("");
-
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setLoading(true);

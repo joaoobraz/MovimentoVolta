@@ -4,6 +4,7 @@
 import { SafeLink as Link } from "@/components/SafeLink";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { calculateResult, quizQuestions } from "@/lib/content";
+import { trackFunnel } from "@/lib/funnel-client";
 
 type LeadForm = { name: string; email: string; phone: string; privacy: boolean; marketing: boolean };
 
@@ -19,6 +20,7 @@ export function QuizExperience() {
   const result = useMemo(()=>calculateResult(answers),[answers]);
 
   useEffect(()=>{
+    void trackFunnel("quiz_started", { source: document.referrer || "direct" });
     const saved = localStorage.getItem("volta-quiz-draft");
     if (saved) try { const parsed=JSON.parse(saved); setAnswers(parsed.answers??{}); setStep(Math.min(parsed.step??0,quizQuestions.length)); } catch {}
   },[]);

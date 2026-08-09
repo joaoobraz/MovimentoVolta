@@ -18,7 +18,7 @@ const coreStatements = [
   `CREATE TABLE IF NOT EXISTS entitlement_claims (id TEXT PRIMARY KEY, email TEXT NOT NULL, product_id TEXT NOT NULL, purchase_id TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'active', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, UNIQUE(email, product_id))`,
   `CREATE TABLE IF NOT EXISTS auth_login_tokens (id TEXT PRIMARY KEY, email TEXT NOT NULL, token_hash TEXT NOT NULL UNIQUE, expires_at TEXT NOT NULL, used_at TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`,
   `CREATE INDEX IF NOT EXISTS idx_auth_login_email_expires ON auth_login_tokens(email, expires_at)`,
-  `CREATE TABLE IF NOT EXISTS products (id TEXT PRIMARY KEY, slug TEXT NOT NULL UNIQUE, name TEXT NOT NULL, price_cents INTEGER NOT NULL, description TEXT, checkout_url TEXT, external_product_id TEXT, status TEXT NOT NULL DEFAULT 'active', position INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, deleted_at TEXT)`,
+  `CREATE TABLE IF NOT EXISTS products (id TEXT PRIMARY KEY, slug TEXT NOT NULL UNIQUE, name TEXT NOT NULL, price_cents INTEGER NOT NULL, description TEXT, checkout_url TEXT, bundle_checkout_url TEXT, external_product_id TEXT, status TEXT NOT NULL DEFAULT 'active', position INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, deleted_at TEXT)`,
   `CREATE TABLE IF NOT EXISTS user_missions (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, mission_id TEXT NOT NULL, response TEXT, status TEXT NOT NULL DEFAULT 'started', first_completed_at TEXT, last_completed_at TEXT, completion_count INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, UNIQUE(user_id, mission_id))`,
   `CREATE TABLE IF NOT EXISTS daily_checkins (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, checkin_date TEXT NOT NULL, mood INTEGER NOT NULL, energy INTEGER NOT NULL, did_something_for_self INTEGER NOT NULL, victory TEXT, difficulty TEXT, wants_sos INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, UNIQUE(user_id, checkin_date))`,
   `CREATE TABLE IF NOT EXISTS journal_entries (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, prompt TEXT, body TEXT NOT NULL, tags_json TEXT, mood INTEGER, energy INTEGER, favorite INTEGER NOT NULL DEFAULT 0, entry_date TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, deleted_at TEXT)`,
@@ -32,6 +32,10 @@ const coreStatements = [
   `CREATE TABLE IF NOT EXISTS system_settings (id TEXT PRIMARY KEY, key TEXT NOT NULL UNIQUE, value_json TEXT NOT NULL, updated_by TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`,
   `CREATE TABLE IF NOT EXISTS automation_settings (id TEXT PRIMARY KEY, kind TEXT NOT NULL UNIQUE, enabled INTEGER NOT NULL DEFAULT 0, requires_consent INTEGER NOT NULL DEFAULT 1, template_json TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`,
   `CREATE TABLE IF NOT EXISTS notification_outbox (id TEXT PRIMARY KEY, user_id TEXT, lead_id TEXT, channel TEXT NOT NULL, kind TEXT NOT NULL, recipient TEXT NOT NULL, payload_json TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, processed_at TEXT)`,
+  `CREATE TABLE IF NOT EXISTS funnel_events (id TEXT PRIMARY KEY, event_type TEXT NOT NULL, lead_id TEXT, user_id TEXT, email TEXT, product_id TEXT, profile_key TEXT, metadata_json TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`,
+  `CREATE INDEX IF NOT EXISTS idx_funnel_event_created ON funnel_events(event_type, created_at)`,
+  `CREATE INDEX IF NOT EXISTS idx_funnel_lead_created ON funnel_events(lead_id, created_at)`,
+  `CREATE INDEX IF NOT EXISTS idx_funnel_email_created ON funnel_events(email, created_at)`,
   `CREATE INDEX IF NOT EXISTS idx_leads_created ON leads(created_at)`,
   `CREATE INDEX IF NOT EXISTS idx_quiz_attempts_profile ON quiz_attempts(profile_key)`,
   `CREATE INDEX IF NOT EXISTS idx_journal_owner ON journal_entries(user_id, entry_date)`,
@@ -49,7 +53,11 @@ export function ensureCoreDb(db = getD1()) {
     if (!productColumns.results.some(column => column.name === "external_product_id")) {
       await db.prepare(`ALTER TABLE products ADD COLUMN external_product_id TEXT`).run();
     }
+    if (!productColumns.results.some(column => column.name === "bundle_checkout_url")) {
+      await db.prepare(`ALTER TABLE products ADD COLUMN bundle_checkout_url TEXT`).run();
+    }
     await seedDemo(db);
+    await db.prepare(`PRAGMA optimize`).run();
   })();
   return initialization;
 }

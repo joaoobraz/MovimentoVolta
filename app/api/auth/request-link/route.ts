@@ -1,5 +1,6 @@
 import { ensureCoreDb, getD1, newId } from "@/db/runtime";
 import { createLoginToken, hashLoginToken } from "@/lib/auth";
+import { emailFrame, sendEmail } from "@/lib/email";
 
 export const dynamic = "force-dynamic";
 
@@ -30,27 +31,15 @@ function configuredAccessEmails() {
     .filter(Boolean));
 }
 
-function emailTemplate(link: string) {
-  return `<!doctype html><html lang="pt-BR"><body style="margin:0;background:#f5eee7;font-family:Arial,sans-serif;color:#44252b"><div style="max-width:560px;margin:32px auto;padding:32px;background:#fff;border-radius:20px"><p style="color:#a64d3b;font-weight:700;letter-spacing:.08em;text-transform:uppercase">Movimento Volta Pra Você</p><h1 style="font-family:Georgia,serif;color:#6f1833">Seu acesso está pronto.</h1><p>Use o botão abaixo para entrar no seu espaço. Este link é pessoal, funciona uma única vez e expira em 15 minutos.</p><p style="margin:28px 0"><a href="${link}" style="display:inline-block;padding:14px 22px;border-radius:999px;background:#7d1d3e;color:#fff;text-decoration:none;font-weight:700">Entrar no meu espaço</a></p><p style="font-size:13px;color:#775f63">Se você não solicitou este acesso, ignore esta mensagem.</p></div></body></html>`;
-}
-
 async function sendAccessEmail(email: string, link: string, tokenId: string) {
-  const response = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
-      "Content-Type": "application/json",
-      "Idempotency-Key": `volta-access-${tokenId}`,
-    },
-    body: JSON.stringify({
-      from: process.env.AUTH_EMAIL_FROM,
-      to: [email],
-      subject: "Seu link de acesso — Movimento Volta Pra Você",
-      html: emailTemplate(link),
-      text: `Seu acesso ao Movimento Volta Pra Você: ${link}\n\nO link expira em 15 minutos e funciona uma única vez.`,
-    }),
+  const result = await sendEmail({
+    to: email,
+    subject: "Seu link de acesso — Movimento Volta Pra Você",
+    html: emailFrame("Seu acesso está pronto.", "Use o botão abaixo para entrar no seu espaço. Este link é pessoal, funciona uma única vez e expira em 15 minutos.", "Entrar no meu espaço", link),
+    text: `Seu acesso ao Movimento Volta Pra Você: ${link}\n\nO link expira em 15 minutos e funciona uma única vez.`,
+    idempotencyKey: `volta-access-${tokenId}`,
   });
-  if (!response.ok) throw new Error(`Falha no provedor de e-mail (${response.status}).`);
+  if (!result.ok) throw new Error(result.error);
 }
 
 export async function POST(request: Request) {
@@ -79,6 +68,7 @@ export async function POST(request: Request) {
   await db.batch([
     db.prepare(`DELETE FROM auth_login_tokens WHERE expires_at<=? OR used_at IS NOT NULL`).bind(new Date().toISOString()),
     db.prepare(`INSERT INTO auth_login_tokens (id,email,token_hash,expires_at) VALUES (?,?,?,?)`).bind(tokenId, email, tokenHash, expiresAt),
+    db.prepare(`INSERT INTO funnel_events (id,event_type,user_id,email,metadata_json) VALUES (?,'login_link_requested',?,?,?)`).bind(newId("funnel"), user?.id || null, email, JSON.stringify({ eligible: true })),
   ]);
 
   const origin = (process.env.NEXT_PUBLIC_SITE_URL || new URL(request.url).origin).replace(/\/$/, "");

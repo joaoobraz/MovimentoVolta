@@ -14,6 +14,9 @@ Plataforma web mobile-first com diagnóstico gratuito, produtos progressivos, á
 - Diário privado, check-ins, Kit SOS, pontos, conquistas e comunidade.
 - Catálogo, preços, links de pagamento, acessos e automações persistentes no painel.
 - Webhooks assinados para aprovação, estorno, liberação e revogação de acesso.
+- E-mail transacional automático após pagamento aprovado e página de confirmação.
+- Funil real de quiz, resultado, checkout, compra e login no painel.
+- Checklist de ativação comercial, sem números estimados ou configurações ocultas.
 - Fila de comunicações que respeita consentimento.
 
 ## Ordem dos produtos
@@ -46,8 +49,10 @@ lib/content.ts              diagnóstico, perfis, missões e SOS
 2. Gere `AUTH_SESSION_SECRET` com no mínimo 32 caracteres aleatórios.
 3. Informe `ADMIN_EMAILS` com os e-mails autorizados a administrar e `TESTER_EMAILS` com as contas que devem enxergar todos os produtos.
 4. Configure `RESEND_API_KEY` e `AUTH_EMAIL_FROM` para enviar os links de acesso.
-5. Cadastre no painel os links de pagamento e o identificador externo de cada produto.
+5. Cadastre no painel os links de pagamento e o identificador externo de cada produto. No Mapa, informe também o checkout combinado com Kit SOS.
 6. Configure o segredo do gateway escolhido e aponte o webhook para `/api/webhooks/<gateway>`.
+7. Cadastre a página `/obrigada` como página de confirmação na Wiapy.
+8. Preencha identificação do fornecedor e canais de atendimento antes de desativar o modo demonstração.
 
 O modo de demonstração deve permanecer desativado em produção.
 
@@ -55,7 +60,7 @@ O modo de demonstração deve permanecer desativado em produção.
 
 O checkout é externo e configurável por produto. Para a Wiapy, use `/api/webhooks/wiapy` e configure `WIAPY_WEBHOOK_TOKEN`. Depois de validar a chamada, o sistema registra a compra, libera o produto para uma conta existente, cria uma reivindicação por e-mail quando a cliente ainda não entrou e revoga o acesso em caso de estorno confirmado.
 
-O cabeçalho esperado pelo normalizador de webhooks é `x-volta-signature`, contendo o HMAC SHA-256 do corpo bruto com o segredo do gateway.
+Na Wiapy, o token é recebido no cabeçalho `Authorization`. Nos demais conectores suportados, o normalizador aceita `x-volta-signature` com HMAC SHA-256 do corpo bruto.
 
 ## Contas individuais
 
