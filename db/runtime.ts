@@ -50,6 +50,10 @@ const coreStatements = [
 
 let initialization: Promise<void> | null = null;
 export function ensureCoreDb(db = getD1()) {
+  // Production schema changes are applied explicitly through the checked-in
+  // migrations. Keeping DDL out of customer requests avoids dozens of
+  // sequential D1 calls whenever Cloudflare starts a new Worker isolate.
+  if (process.env.RUNTIME_DB_SETUP === "disabled") return Promise.resolve();
   initialization ??= (async () => {
     for (const sql of coreStatements) await db.prepare(sql).run();
     const userColumns = await db.prepare(`PRAGMA table_info(users)`).all<{ name: string }>();
@@ -101,6 +105,8 @@ async function seedDemo(db: D1Database) {
   for (const kind of automationSeeds) {
     await db.prepare(`INSERT OR IGNORE INTO automation_settings (id,kind,enabled,requires_consent,template_json) VALUES (?,?,0,1,?)`).bind(`automation-${kind}`, kind, JSON.stringify({ subject: "", message: "" })).run();
   }
+  await db.prepare(`INSERT OR IGNORE INTO users (id,email,name,role,status) VALUES ('system','comunidade@movimentovolta.com.br','Movimento Volta Pra Você','admin','active')`).run();
+  await db.prepare(`INSERT OR IGNORE INTO community_posts (id,user_id,category,body,anonymous,pinned) VALUES ('post-welcome-official','system','Boas-vindas','Bem-vinda à comunidade da Jornada. Este é um espaço para registrar pequenas vitórias, recomeços e limites possíveis, sem comparação. Seu diário continua sempre privado. Antes de publicar, evite compartilhar telefone, endereço, documentos ou qualquer dado pessoal.','0','1')`).run();
   if (process.env.DEMO_MODE !== "true") return;
   const demoEmail = (process.env.DEMO_EMAIL || "maria@demonstracao.com").trim().toLowerCase();
   const demoName = process.env.DEMO_NAME || "Maria";

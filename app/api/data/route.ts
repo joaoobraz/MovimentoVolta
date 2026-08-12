@@ -211,7 +211,7 @@ export async function GET(request: Request) {
     db.prepare(`SELECT COALESCE(SUM(points),0) AS total FROM points_history WHERE user_id=?`).bind(identity.id).first<{ total: number }>(),
     db.prepare(`SELECT profile_key,score,result_json,desired_area,weight_area,available_minutes FROM user_profiles WHERE user_id=?`).bind(identity.id).first<JsonRecord>(),
     db.prepare(`SELECT reminders_enabled,marketing_enabled,theme,text_size FROM user_preferences WHERE user_id=?`).bind(identity.id).first<JsonRecord>(),
-    canUse(access, "community") ? db.prepare(`SELECT p.*,u.name,(SELECT COUNT(*) FROM community_likes l WHERE l.post_id=p.id) AS likes FROM community_posts p LEFT JOIN users u ON u.id=p.user_id WHERE p.status='published' AND p.deleted_at IS NULL ${process.env.DEMO_MODE === "true" ? "" : "AND p.user_id NOT LIKE 'demo-%'"} ORDER BY p.pinned DESC,p.created_at DESC LIMIT 50`).all<JsonRecord>() : Promise.resolve({ results: [] as JsonRecord[] }),
+    canUse(access, "community") ? db.prepare(`SELECT p.*,COALESCE(u.name,'Movimento Volta Pra Você') AS name,(SELECT COUNT(*) FROM community_likes l WHERE l.post_id=p.id) AS likes FROM community_posts p LEFT JOIN users u ON u.id=p.user_id WHERE p.status='published' AND p.deleted_at IS NULL ${process.env.DEMO_MODE === "true" ? "" : "AND p.user_id NOT LIKE 'demo-%'"} ORDER BY p.pinned DESC,p.created_at DESC LIMIT 50`).all<JsonRecord>() : Promise.resolve({ results: [] as JsonRecord[] }),
     canUse(access, "community") ? db.prepare(`SELECT post_id FROM community_likes WHERE user_id=?`).bind(identity.id).all<{ post_id: string }>() : Promise.resolve({ results: [] as { post_id: string }[] }),
   ]);
   return json({
@@ -372,12 +372,17 @@ export async function POST(request: Request) {
     }
     if (action === "post.like") {
       const postId = sanitizeText(body.postId, 120);
+      const visiblePost = await db.prepare(`SELECT id FROM community_posts WHERE id=? AND status='published' AND deleted_at IS NULL`).bind(postId).first<{ id: string }>();
+      if (!visiblePost) return json({ error: "Esta publicação não está disponível." }, 404);
       const found = await db.prepare(`SELECT id FROM community_likes WHERE post_id=? AND user_id=?`).bind(postId, identity.id).first<{ id: string }>();
       if (found) await db.prepare(`DELETE FROM community_likes WHERE id=?`).bind(found.id).run();
       else await db.prepare(`INSERT INTO community_likes (id,post_id,user_id) VALUES (?,?,?)`).bind(newId("like"), postId, identity.id).run();
       return json({ ok: true, liked: !found });
     }
-    await db.prepare(`INSERT INTO community_reports (id,post_id,reporter_id,reason) VALUES (?,?,?,?)`).bind(newId("report"), sanitizeText(body.postId, 120), identity.id, sanitizeText(body.reason, 300) || "Conteúdo inadequado").run();
+    const postId = sanitizeText(body.postId, 120);
+    const visiblePost = await db.prepare(`SELECT id FROM community_posts WHERE id=? AND status='published' AND deleted_at IS NULL`).bind(postId).first<{ id: string }>();
+    if (!visiblePost) return json({ error: "Esta publicação não está disponível." }, 404);
+    await db.prepare(`INSERT INTO community_reports (id,post_id,reporter_id,reason) VALUES (?,?,?,?)`).bind(newId("report"), postId, identity.id, sanitizeText(body.reason, 300) || "Conteúdo inadequado").run();
     return json({ ok: true });
   }
   if (action === "preferences.update") {
