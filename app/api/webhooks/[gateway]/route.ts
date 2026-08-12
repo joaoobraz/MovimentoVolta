@@ -148,8 +148,9 @@ export async function POST(request: Request, context: { params: Promise<{ gatewa
   const exists = await db.prepare(`SELECT id FROM webhook_events WHERE gateway=? AND external_id=?`).bind(gateway, externalId).first();
   if (exists) return Response.json({ ok: true, idempotent: true });
 
-  const approved = ["approved", "paid", "succeeded", "completed", "purchase_approved", "payment_intent.succeeded"].some(value => statusValue.includes(value) || eventType.includes(value));
-  const reversed = ["refunded", "refund", "chargedback", "chargeback", "canceled", "cancelled", "payment_intent.canceled"].some(value => statusValue.includes(value) || eventType.includes(value));
+  const statusSignals = new Set([statusValue, eventType].filter(Boolean));
+  const approved = ["approved", "paid", "succeeded", "completed", "purchase_approved", "payment_intent.succeeded"].some(value => statusSignals.has(value));
+  const reversed = ["refunded", "refund", "chargedback", "chargeback", "canceled", "cancelled", "payment_intent.canceled"].some(value => statusSignals.has(value));
   let processingStatus = "ignored";
 
   if (approved && email) {

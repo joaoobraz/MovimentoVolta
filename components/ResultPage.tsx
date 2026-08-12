@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { ProfileKey, profileContent } from "@/lib/content";
 import { trackFunnel } from "@/lib/funnel-client";
 import { personalizedOfferReason, personalizedPlan, profileExperience } from "@/lib/personalization";
+import { appendAttribution } from "@/lib/attribution";
 
 type StoredResult = { name: string; email?: string; profile: ProfileKey; score: number; areas: Record<string, number>; weight: string; desired: string; availableMinutes?: number; leadId?: string };
 type Product = { id: string; name: string; price: number; access: string; checkoutUrl: string; bundleCheckoutUrl?: string; downsellCheckoutUrl?: string };
@@ -18,7 +19,7 @@ function checkoutHref(selectedCheckout: string | undefined, data: StoredResult, 
     const url = new URL(selectedCheckout, window.location.origin);
     if (data.leadId) url.searchParams.set("lead_id", data.leadId);
     if (data.email) url.searchParams.set("email", data.email);
-    return url.toString();
+    return appendAttribution(url).toString();
   } catch { return selectedCheckout; }
 }
 

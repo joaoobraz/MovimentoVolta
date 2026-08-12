@@ -63,18 +63,22 @@ export function PasswordLoginForm({
   }
 
   if (sent) return <div className="email-link-sent" role="status">
-    <strong>Confira seu e-mail.</strong>
-    <p>Se o endereço estiver ligado a uma compra ou conta ativa, você receberá as instruções para criar ou redefinir sua senha.</p>
+    <strong>Solicitação recebida.</strong>
+    <p>Se este e-mail estiver ligado a uma compra aprovada, enviaremos o link em poucos minutos. Confira também as pastas Spam e Promoções.</p>
+    <p>O remetente será <strong>acesso@movimentovolta.com.br</strong>.</p>
     <button className="forgot-link" type="button" onClick={() => { setSent(false); setRecovering(false); }}>Voltar ao login</button>
   </div>;
 
   if (recovering) return <form className="buyer-login-preview" onSubmit={requestAccess}>
-    <p className="auth-form-intro">Enviaremos um link de uso único para você criar ou redefinir sua senha.</p>
+    <div className="auth-recovery-explanation">
+      <strong>Primeiro acesso ou senha esquecida</strong>
+      <p>Digite exatamente o e-mail informado no checkout. Enviaremos um link seguro para criar ou redefinir sua senha.</p>
+    </div>
     <label>E-mail usado na compra
       <input name="email" type="email" autoComplete="email" required value={email} onChange={event => setEmail(event.target.value)} placeholder="seuemail@exemplo.com"/>
     </label>
     {error && <p className="form-error" role="alert">{error}</p>}
-    <button className="auth-submit-button" type="submit" disabled={loading}>{loading ? "Enviando…" : "Enviar e-mail de segurança"}</button>
+    <button className="auth-submit-button" type="submit" disabled={loading}>{loading ? "Enviando…" : "Enviar link para criar ou recuperar senha"}</button>
     <button className="forgot-link auth-back-link" type="button" onClick={() => { setRecovering(false); setError(""); }}>Voltar ao login</button>
   </form>;
 
@@ -87,6 +91,6 @@ export function PasswordLoginForm({
     </label>
     {error && <p className="form-error" role="alert">{error}</p>}
     <button className="auth-submit-button" type="submit" disabled={loading}>{loading ? "Entrando…" : "Entrar com segurança"}</button>
-    {allowRecovery && <button className="forgot-link auth-recovery-link" type="button" onClick={() => { setRecovering(true); setError(""); }}>Criar ou recuperar senha</button>}
+    {allowRecovery && <button className="forgot-link auth-recovery-link" type="button" onClick={() => { setRecovering(true); setError(""); }}>Primeiro acesso ou esqueci minha senha</button>}
   </form>;
 }

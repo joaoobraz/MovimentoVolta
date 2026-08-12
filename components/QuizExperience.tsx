@@ -5,8 +5,19 @@ import { SafeLink as Link } from "@/components/SafeLink";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { calculateResult, quizQuestions } from "@/lib/content";
 import { trackFunnel } from "@/lib/funnel-client";
+import { captureAttribution } from "@/lib/attribution";
 
 type LeadForm = { name: string; email: string; phone: string; privacy: boolean; marketing: boolean };
+
+function formatBrazilianPhone(value:string) {
+  const digits=value.replace(/\D/g,"").slice(0,11);
+  if (!digits) return "";
+  if (digits.length < 3) return `(${digits}`;
+  const ddd=digits.slice(0,2), number=digits.slice(2);
+  if (number.length <= 1) return `(${ddd}) ${number}`;
+  if (number.length <= 5) return `(${ddd}) ${number.slice(0,1)} ${number.slice(1)}`;
+  return `(${ddd}) ${number.slice(0,1)} ${number.slice(1,5)}-${number.slice(5)}`;
+}
 
 export function QuizExperience() {
   const [step, setStep] = useState(0);
@@ -34,9 +45,10 @@ export function QuizExperience() {
   async function submit(event:FormEvent) {
     event.preventDefault(); setError("");
     if (!lead.privacy) { setError("Você precisa aceitar a política de privacidade para acessar o resultado."); return; }
+    if (lead.phone.replace(/\D/g,"").length !== 11) { setError("Informe um WhatsApp completo com DDD e nove dígitos."); return; }
     setSubmitting(true);
-    const params=new URLSearchParams(window.location.search); const utm=Object.fromEntries(["utm_source","utm_medium","utm_campaign","utm_content","utm_term"].map(key=>[key,params.get(key)??""]));
-    const payload={action:"lead",name:lead.name,email:lead.email,phone:lead.phone,privacyConsent:lead.privacy,marketingConsent:lead.marketing,answers,profile:result.profile,score:result.score,result,utm,landingUrl:document.referrer||window.location.origin};
+    const attribution=captureAttribution(); const utm=Object.fromEntries(["utm_source","utm_medium","utm_campaign","utm_content","utm_term"].map(key=>[key,attribution[key as keyof typeof attribution]??""]));
+    const payload={action:"lead",name:lead.name,email:lead.email,phone:lead.phone,privacyConsent:lead.privacy,marketingConsent:lead.marketing,answers,profile:result.profile,score:result.score,result,utm,landingUrl:attribution.landing_url||window.location.origin};
     try {
       const response=await fetch("/api/data",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
       const data=await response.json() as {error?:string;leadId?:string}; if(!response.ok) throw new Error(data.error||"Não foi possível salvar seu diagnóstico.");
@@ -58,7 +70,7 @@ export function QuizExperience() {
       <form onSubmit={submit} className="lead-form">
         <label>Primeiro nome<input required minLength={2} autoComplete="given-name" value={lead.name} onChange={e=>setLead({...lead,name:e.target.value})} placeholder="Como você gosta de ser chamada?"/></label>
         <label>E-mail<input required type="email" autoComplete="email" value={lead.email} onChange={e=>setLead({...lead,email:e.target.value})} placeholder="voce@exemplo.com"/></label>
-        <label>WhatsApp<input required type="tel" inputMode="tel" autoComplete="tel" value={lead.phone} onChange={e=>setLead({...lead,phone:e.target.value})} placeholder="(11) 99999-9999"/></label>
+        <label>WhatsApp <small>Digite DDD e número, por exemplo: (11) 9 9999-9999</small><input required type="tel" inputMode="numeric" autoComplete="tel" maxLength={16} pattern="\([0-9]{2}\) [0-9] [0-9]{4}-[0-9]{4}" value={lead.phone} onChange={e=>setLead({...lead,phone:formatBrazilianPhone(e.target.value)})} placeholder="(11) 9 9999-9999" aria-describedby="whatsapp-hint"/><span id="whatsapp-hint" className="field-hint">A formatação aparece automaticamente.</span></label>
         <label className="check-row"><input type="checkbox" checked={lead.privacy} onChange={e=>setLead({...lead,privacy:e.target.checked})}/><span>Li e aceito a <Link href="/legal#privacidade">Política de Privacidade</Link>. <b>Obrigatório</b></span></label>
         <label className="check-row"><input type="checkbox" checked={lead.marketing} onChange={e=>setLead({...lead,marketing:e.target.checked})}/><span>Quero receber conteúdos e ofertas do Movimento. Posso cancelar quando quiser.</span></label>
         {error&&<p className="form-error" role="alert">{error}</p>}

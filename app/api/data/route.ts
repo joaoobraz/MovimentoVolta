@@ -258,7 +258,8 @@ export async function POST(request: Request) {
 
   if (action === "lead") {
     const name = sanitizeText(body.name, 80), email = sanitizeText(body.email, 160).toLowerCase(), phone = sanitizeText(body.phone, 30);
-    if (name.length < 2 || !/^\S+@\S+\.\S+$/.test(email) || phone.length < 8 || body.privacyConsent !== true) return json({ error: "Revise nome, e-mail, WhatsApp e aceite de privacidade." }, 400);
+    const phoneDigits = phone.replace(/\D/g, "");
+    if (name.length < 2 || !/^\S+@\S+\.\S+$/.test(email) || phoneDigits.length !== 11 || body.privacyConsent !== true) return json({ error: "Revise nome, e-mail, WhatsApp com DDD e aceite de privacidade." }, 400);
     const leadId = newId("lead"), attemptId = newId("quiz"), answers = (body.answers ?? {}) as Record<string, string>, result = (body.result ?? {}) as JsonRecord;
     const signedIn = await getSessionIdentityFromRequest(request);
     const user = signedIn ? await syncUser(db, signedIn) : null;
