@@ -36,6 +36,7 @@
     "NEXT_PUBLIC_SITE_URL": "https://movimentovolta.com.br",
     "BUSINESS_NAME": "Movimento Volta Pra Você",
     "SUPPORT_EMAIL": "suporte@movimentovolta.com.br",
+    "AUTH_EMAIL_FROM": "Movimento Volta Pra Você <acesso@movimentovolta.com.br>",
     "WIAPY_COMPLETE_CHECKOUT_IDS": "6a7c1bc91943b5bbdebeb873,c42msx5o82xw,6a7c1c319df1dadce85dd516,atspo4-urojh",
     "WIAPY_CHECKOUT_PRODUCT_MAP": "6a7c29409df1dadce85e0837:mapa,evrdhg9kbuzd:mapa,6a7c2844c558e3b229d89f0f:sos,6a7c2a27c558e3b229d8a919:desafio,6a7c2a4a9df1dadce85e0e40:jornada"
   }

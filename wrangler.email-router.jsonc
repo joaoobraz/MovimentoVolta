@@ -1,0 +1,7 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "movimento-volta-email-router",
+  "account_id": "2f9112dc4b3fd1488f0d450b56c115a1",
+  "main": "worker/email-router.js",
+  "compatibility_date": "2026-08-12"
+}

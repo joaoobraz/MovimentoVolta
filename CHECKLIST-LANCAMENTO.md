@@ -8,8 +8,8 @@ Atualizado em 12 de agosto de 2026.
 - [x] Site e aplicativo publicados no domínio principal
 - [x] Encaminhamento de `suporte@movimentovolta.com.br` para o Gmail da operação
 - [x] SPF e registros MX da Cloudflare ativos
-- [ ] Confirmar o código enviado pela Wiapy ao e-mail de suporte
-- [ ] Escolher o plano de envio transacional e validar o remetente do domínio
+- [x] Confirmar o código enviado pela Wiapy ao e-mail de suporte
+- [x] Escolher o plano de envio transacional e validar o remetente do domínio
 
 ## Produtos e preços
 
@@ -40,15 +40,16 @@ Atualizado em 12 de agosto de 2026.
 - [x] Reembolso ou chargeback revoga o acesso relacionado
 - [x] Primeiro acesso usa link único para criação de senha
 - [x] Login posterior usa e-mail e senha
-- [ ] Validar o remetente de saída e configurar a chave do provedor de e-mail
+- [x] Validar o remetente de saída e configurar a chave do provedor de e-mail
+- [x] Vincular o webhook a todos os checkouts antigos e atuais da Wiapy
 - [ ] Executar uma compra real de R$ 1,00 ou cupom de teste autorizado pela Wiapy
 - [ ] Confirmar recebimento do e-mail, criação de senha, login e liberação do produto
 - [ ] Confirmar revogação com um reembolso de teste
 
 ## Revisão final
 
-- [ ] Confirmar aprovação do novo Plano VOLTA Completo na Wiapy
-- [ ] Confirmar que todos os checkouts saíram de “Aguardando código”
+- [x] Confirmar que o novo Plano VOLTA Completo não apresenta recusa na Wiapy
+- [x] Confirmar que todos os checkouts saíram de “Aguardando código”
 - [ ] Testar a jornada completa em celular Android e iPhone
 - [x] Testar carregamento das páginas inicial, quiz, login, obrigada e catálogo público
 - [x] Confirmar que o quiz avança entre as perguntas
@@ -56,3 +57,12 @@ Atualizado em 12 de agosto de 2026.
 - [x] Confirmar que o webhook rejeita requisições sem o token correto
 - [ ] Testar resultado, checkout, ativação e aplicativo com uma compra real de baixo valor
 - [ ] Conferir dados legais do fornecedor antes de iniciar anúncios
+
+# E-mail operacional
+
+- [x] `suporte@movimentovolta.com.br` recebe mensagens pela Cloudflare Email Routing.
+- [x] Encaminhamento ativo para `lg09030220@gmail.com` e `joaobraz.ofc@gmail.com` pelo Worker `movimento-volta-email-router`.
+- [x] Todos os checkouts da Wiapy tiveram o e-mail de suporte validado e estão ativos.
+- [x] Resend configurado no plano gratuito para criação e recuperação de senha.
+- [x] Domínio `movimentovolta.com.br` autenticado por DKIM, SPF e DMARC.
+- [x] Chave de produção com permissão somente de envio armazenada como segredo do Worker.
