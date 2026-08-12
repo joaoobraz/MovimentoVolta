@@ -27,7 +27,7 @@ export function LandingPage() {
   const [dark, setDark] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
   useEffect(() => { setCookies(localStorage.getItem("volta-cookies") !== "accepted"); }, []);
-  useEffect(() => { fetch("/api/data?mode=catalog").then(response => response.json() as Promise<{ products: Product[] }>).then(data => setProducts(data.products || [])).catch(() => undefined); }, []);
+  useEffect(() => { fetch("/api/data?mode=catalog").then(response => response.json() as Promise<{ products: Product[] }>).then(data => setProducts((data.products || []).filter(product => product.id !== "completo"))).catch(() => undefined); }, []);
   useEffect(() => { document.documentElement.dataset.theme = dark ? "dark" : "light"; document.documentElement.dataset.text = largeText ? "large" : "normal"; }, [dark, largeText]);
   const speak = () => {
     speechSynthesis.cancel();

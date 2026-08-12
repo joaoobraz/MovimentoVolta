@@ -5,7 +5,7 @@ const id = () => text("id").primaryKey();
 const timestamp = (name: string) => text(name).notNull().default(sql`CURRENT_TIMESTAMP`);
 
 export const users = sqliteTable("users", {
-  id: id(), email: text("email").notNull(), name: text("name").notNull(), phone: text("phone"), role: text("role").notNull().default("member"), status: text("status").notNull().default("active"), createdAt: timestamp("created_at"), updatedAt: timestamp("updated_at"), deletedAt: text("deleted_at"),
+  id: id(), email: text("email").notNull(), name: text("name").notNull(), phone: text("phone"), role: text("role").notNull().default("member"), status: text("status").notNull().default("active"), passwordHash: text("password_hash"), passwordSalt: text("password_salt"), passwordIterations: integer("password_iterations"), passwordSetAt: text("password_set_at"), createdAt: timestamp("created_at"), updatedAt: timestamp("updated_at"), deletedAt: text("deleted_at"),
 }, (t) => [uniqueIndex("idx_users_email").on(t.email), index("idx_users_status").on(t.status)]);
 
 export const userProfiles = sqliteTable("user_profiles", {
@@ -40,7 +40,7 @@ export const utmTracking = sqliteTable("utm_tracking", {
 }, (t) => [index("idx_utm_lead").on(t.leadId), index("idx_utm_campaign").on(t.campaign)]);
 
 export const products = sqliteTable("products", {
-  id: id(), slug: text("slug").notNull(), name: text("name").notNull(), priceCents: integer("price_cents").notNull(), description: text("description"), checkoutUrl: text("checkout_url"), bundleCheckoutUrl: text("bundle_checkout_url"), externalProductId: text("external_product_id"), status: text("status").notNull().default("active"), position: integer("position").notNull().default(0), createdAt: timestamp("created_at"), updatedAt: timestamp("updated_at"), deletedAt: text("deleted_at"),
+  id: id(), slug: text("slug").notNull(), name: text("name").notNull(), priceCents: integer("price_cents").notNull(), description: text("description"), checkoutUrl: text("checkout_url"), bundleCheckoutUrl: text("bundle_checkout_url"), downsellCheckoutUrl: text("downsell_checkout_url"), externalProductId: text("external_product_id"), status: text("status").notNull().default("active"), position: integer("position").notNull().default(0), createdAt: timestamp("created_at"), updatedAt: timestamp("updated_at"), deletedAt: text("deleted_at"),
 }, (t) => [uniqueIndex("idx_products_slug").on(t.slug)]);
 export const purchases = sqliteTable("purchases", {
   id: id(), userId: text("user_id").references(() => users.id, { onDelete: "set null" }), leadId: text("lead_id").references(() => leads.id, { onDelete: "set null" }), productId: text("product_id").notNull(), gateway: text("gateway").notNull().default("simulation"), gatewayEventId: text("gateway_event_id"), amountCents: integer("amount_cents").notNull(), status: text("status").notNull().default("approved"), createdAt: timestamp("created_at"), updatedAt: timestamp("updated_at"), deletedAt: text("deleted_at"),
@@ -52,8 +52,12 @@ export const entitlementClaims = sqliteTable("entitlement_claims", {
   id: id(), email: text("email").notNull(), productId: text("product_id").notNull(), purchaseId: text("purchase_id").notNull(), status: text("status").notNull().default("active"), createdAt: timestamp("created_at"), updatedAt: timestamp("updated_at"),
 }, (t) => [uniqueIndex("idx_claims_email_product").on(t.email, t.productId), index("idx_claims_email_status").on(t.email, t.status)]);
 export const authLoginTokens = sqliteTable("auth_login_tokens", {
-  id: id(), email: text("email").notNull(), tokenHash: text("token_hash").notNull(), expiresAt: text("expires_at").notNull(), usedAt: text("used_at"), createdAt: timestamp("created_at"),
+  id: id(), email: text("email").notNull(), tokenHash: text("token_hash").notNull(), purpose: text("purpose").notNull().default("activation"), expiresAt: text("expires_at").notNull(), usedAt: text("used_at"), createdAt: timestamp("created_at"),
 }, (t) => [uniqueIndex("idx_auth_login_token_hash").on(t.tokenHash), index("idx_auth_login_email_expires").on(t.email, t.expiresAt)]);
+
+export const authLoginAttempts = sqliteTable("auth_login_attempts", {
+  id: id(), emailHash: text("email_hash").notNull(), ipHash: text("ip_hash").notNull(), success: integer("success", { mode: "boolean" }).notNull().default(false), createdAt: timestamp("created_at"),
+}, (t) => [index("idx_auth_attempt_email_created").on(t.emailHash, t.createdAt), index("idx_auth_attempt_ip_created").on(t.ipHash, t.createdAt)]);
 
 export const journeys = sqliteTable("journeys", {
   id: id(), slug: text("slug").notNull(), name: text("name").notNull(), durationDays: integer("duration_days").notNull(), releaseMode: text("release_mode").notNull().default("daily"), status: text("status").notNull().default("active"), createdAt: timestamp("created_at"), updatedAt: timestamp("updated_at"),

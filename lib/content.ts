@@ -87,7 +87,7 @@ const missionSeeds = [
 export const missions = Array.from({ length: 30 }, (_, index) => {
   const seed = missionSeeds[index % missionSeeds.length];
   const phase = phases[Math.min(4, Math.floor(index / 6))];
-  return { id: `dia-${index + 1}`, day: index + 1, phase: phase.name, title: index < 7 ? seed[0] : `${seed[0]} — passo ${Math.floor(index / 7) + 1}`, letter: seed[1], action: seed[2], minutes: [8, 10, 12, 15][index % 4], difficulty: index % 3 === 0 ? "Leve" : index % 3 === 1 ? "Possível" : "Corajosa", points: 10, share: ["Hoje eu fiz algo por mim.", "Uma pequena mudança também é movimento.", "Eu não preciso terminar tudo para merecer descansar."][index % 3] };
+  return { id: `dia-${index + 1}`, day: index + 1, phase: phase.name, title: index < 7 ? seed[0] : `${seed[0]} | passo ${Math.floor(index / 7) + 1}`, letter: seed[1], action: seed[2], minutes: [8, 10, 12, 15][index % 4], difficulty: index % 3 === 0 ? "Leve" : index % 3 === 1 ? "Possível" : "Corajosa", points: 10, share: ["Hoje eu fiz algo por mim.", "Uma pequena mudança também é movimento.", "Eu não preciso terminar tudo para merecer descansar."][index % 3] };
 });
 
 export const sosItems = [
@@ -103,5 +103,5 @@ export const products = [
   { id: "mapa", name: "Mapa da Volta", price: 17, access: "Diagnóstico completo, plano de 7 dias, diário básico e relatório" },
   { id: "sos", name: "Kit SOS Para Dias Difíceis", price: 27, access: "Biblioteca SOS completa" },
   { id: "desafio", name: "Desafio 7 Dias Sem Me Abandonar", price: 47, access: "Desafio, cartões, check-in e gamificação" },
-  { id: "jornada", name: "Jornada VOLTA — 30 Dias", price: 147, access: "Jornada completa, relatórios, comunidade e diário" },
+  { id: "jornada", name: "Jornada VOLTA 30 Dias", price: 147, access: "Jornada completa, relatórios, comunidade e diário" },
 ];

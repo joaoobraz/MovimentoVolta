@@ -36,6 +36,20 @@
       "when": 1786288517368,
       "tag": "0004_familiar_vindicator",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1786326327742,
+      "tag": "0005_perpetual_mother_askani",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1786516310078,
+      "tag": "0006_military_william_stryker",
+      "breakpoints": true
     }
   ]
 }

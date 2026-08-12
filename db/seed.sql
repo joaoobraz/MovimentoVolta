@@ -10,7 +10,8 @@ INSERT OR IGNORE INTO products (id,slug,name,price_cents,description) VALUES
 ('mapa','mapa','Mapa da Volta',1700,'Diagnóstico completo e plano de sete dias.'),
 ('sos','sos','Kit SOS Para Dias Difíceis',2700,'Biblioteca de ações práticas para dias difíceis.'),
 ('desafio','desafio','Desafio 7 Dias Sem Me Abandonar',4700,'Sete dias de pequenas ações, check-ins e cartões.'),
-('jornada','jornada','Jornada VOLTA — 30 Dias',14700,'Jornada completa do Método VOLTA.');
+('jornada','jornada','Jornada VOLTA 30 Dias',14700,'Jornada completa do Método VOLTA.'),
+('completo','plano-volta-completo','Plano VOLTA Completo',4700,'Mapa da Volta, Kit SOS e Desafio de 7 Dias em uma única experiência.');
 
 INSERT OR IGNORE INTO achievements (id,slug,name,threshold) VALUES
 ('ach-1','primeiro-passo','Primeiro passo',1),

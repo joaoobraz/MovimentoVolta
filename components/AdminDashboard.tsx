@@ -6,7 +6,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 
 type Section = "dashboard" | "activation" | "leads" | "content" | "community" | "access" | "automation";
 type Row = Record<string, unknown>;
-type Product = { id: string; name: string; price: number; access: string; checkoutUrl: string; bundleCheckoutUrl: string; externalId: string; status: string; position: number };
+type Product = { id: string; name: string; price: number; access: string; checkoutUrl: string; bundleCheckoutUrl: string; downsellCheckoutUrl: string; externalId: string; status: string; position: number };
 type Automation = { kind: string; enabled: number | boolean; requires_consent: number | boolean; template_json: string };
 type Readiness = { productionMode: boolean; emailConfigured: boolean; wiapyConfigured: boolean; catalogConfigured: boolean; bundleConfigured: boolean; legalConfigured: boolean; supportConfigured: boolean; ready: boolean };
 type AdminData = { viewer: { name: string; email: string }; metrics: Record<string, number>; profiles: Row[]; leads: Row[]; reports: Row[]; products: Product[]; automations: Automation[]; integration: { gateway?: string; supportEmail?: string; whatsapp?: string }; readiness: Readiness };
@@ -41,10 +41,10 @@ function Activation({ data }: { data: AdminData }) {
   const webhook = typeof window === "undefined" ? "/api/webhooks/wiapy" : `${window.location.origin}/api/webhooks/wiapy`;
   const items = [
     [data.readiness.productionMode, "Modo de produção", "Desative DEMO_MODE somente depois de validar os demais itens."],
-    [data.readiness.emailConfigured, "E-mail de acesso", "Configure Resend, remetente verificado e segredo da sessão."],
+    [data.readiness.emailConfigured, "E-mail de ativação", "Configure Resend, remetente verificado e segredo da sessão."],
     [data.readiness.wiapyConfigured, "Webhook Wiapy", "Cadastre o token protegido e use a URL abaixo na Wiapy."],
-    [data.readiness.catalogConfigured, "Produtos conectados", "Preencha link de checkout e ID Wiapy nos quatro produtos."],
-    [data.readiness.bundleConfigured, "Oferta Mapa + Kit SOS", "Preencha o checkout combinado para o adicional funcionar sem divergência."],
+    [data.readiness.catalogConfigured, "Produtos conectados", "Preencha o link de checkout e o ID Wiapy de todos os produtos ativos."],
+    [data.readiness.bundleConfigured, "Oferta completa e recuperação", "Preencha os checkouts de R$ 47 e de recuperação por R$ 17 no Plano VOLTA Completo."],
     [data.readiness.legalConfigured, "Dados legais", "Cadastre razão social, CPF/CNPJ e endereço do fornecedor."],
     [data.readiness.supportConfigured, "Atendimento", "Defina e-mail ou WhatsApp de suporte na seção Automações."],
   ] as const;
@@ -71,12 +71,12 @@ function Products({ data, setData, say }: { data: AdminData; setData: (value: Ad
       <label>Nome<input value={product.name} onChange={event => change(product.id, { name: event.target.value })}/></label>
       <label>Preço<input type="number" min="0" step="0.01" value={product.price} onChange={event => change(product.id, { price: Number(event.target.value) })}/></label>
       <label>Entregáveis<textarea value={product.access} onChange={event => change(product.id, { access: event.target.value })}/></label>
-      <label>Link do checkout Wiapy<input type="url" value={product.checkoutUrl} onChange={event => change(product.id, { checkoutUrl: event.target.value })} placeholder="https://wiapy.com/checkout/…"/></label>
-      {product.id === "mapa" && <label>Checkout combinado: Mapa + Kit SOS<input type="url" value={product.bundleCheckoutUrl || ""} onChange={event => change(product.id, { bundleCheckoutUrl: event.target.value })} placeholder="https://wiapy.com/checkout/…"/><small>Use um checkout da Wiapy que já inclua os dois produtos. Assim o valor e a liberação ficam consistentes.</small></label>}
+      {product.id !== "completo" && <label>Link do checkout Wiapy<input type="url" value={product.checkoutUrl} onChange={event => change(product.id, { checkoutUrl: event.target.value })} placeholder="https://wiapy.com/checkout/…"/></label>}
+      {product.id === "completo" && <><label>Checkout da oferta completa por R$ 47<input type="url" value={product.checkoutUrl} onChange={event => change(product.id, { checkoutUrl: event.target.value })} placeholder="https://wiapy.com/checkout/…"/><small>Este é o botão principal da oferta com Mapa, Kit SOS e Desafio.</small></label><label>Checkout de recuperação por R$ 17<input type="url" value={product.downsellCheckoutUrl || ""} onChange={event => change(product.id, { downsellCheckoutUrl: event.target.value })} placeholder="https://wiapy.com/checkout/…"/><small>Condição de primeira turma exibida somente quando a visitante tenta sair.</small></label></>}
       <label>ID do produto na Wiapy<input value={product.externalId || ""} onChange={event => change(product.id, { externalId: event.target.value })} placeholder="Ex.: 66df9e14dbebe565ee587fc3"/><small>Usado para liberar o acesso certo após Pix ou cartão aprovado.</small></label>
       <label className="check-row"><input type="checkbox" checked={product.status === "active"} onChange={event => change(product.id, { status: event.target.checked ? "active" : "inactive" })}/><span>Produto ativo</span></label>
     </article>)}</div>
-    <div className="admin-note"><strong>Ordem recomendada</strong><p>Diagnóstico gratuito → Mapa da Volta → Kit SOS → Desafio de 7 dias → Jornada de 30 dias. Cada etapa resolve uma necessidade e prepara a próxima.</p></div>
+    <div className="admin-note"><strong>Ordem recomendada</strong><p>Diagnóstico gratuito, escolha entre Mapa ou Plano Completo, Kit SOS, Desafio de 7 dias e Jornada de 30 dias. Cada compra usa a mesma conta e preserva o perfil criado no quiz.</p></div>
   </div>;
 }
 

@@ -1,4 +1,4 @@
-export type FunnelEvent = "quiz_started" | "result_viewed" | "checkout_clicked" | "thank_you_viewed";
+export type FunnelEvent = "quiz_started" | "result_viewed" | "checkout_clicked" | "exit_offer_viewed" | "exit_offer_clicked" | "thank_you_viewed";
 
 export function trackFunnel(event: FunnelEvent, data: Record<string, unknown> = {}) {
   const identity = String(data.leadId || data.productId || "visit");

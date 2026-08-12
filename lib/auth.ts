@@ -6,11 +6,20 @@ export type SessionIdentity = {
 
 type SessionPayload = SessionIdentity & { exp: number };
 
+export type PasswordCredential = {
+  password_hash: string | null;
+  password_salt: string | null;
+  password_iterations: number | null;
+};
+
 export const SESSION_COOKIE = "volta_session";
 export const DEMO_SESSION_COOKIE = "volta-demo-session";
 export const SESSION_MAX_AGE = 60 * 60 * 24 * 30;
 
 const encoder = new TextEncoder();
+export const PASSWORD_ITERATIONS = 600_000;
+export const PASSWORD_MIN_LENGTH = 10;
+export const PASSWORD_MAX_LENGTH = 128;
 
 function toBase64Url(bytes: Uint8Array) {
   let binary = "";
@@ -30,8 +39,8 @@ function cookieValue(cookieHeader: string, name: string) {
 }
 
 function configuredDemoIdentity(): SessionIdentity {
-  const email = (process.env.DEMO_EMAIL || "teste@volta.local").trim().toLowerCase();
-  return { id: "demo-owner", email, name: process.env.DEMO_NAME || "Conta de teste" };
+  const email = (process.env.DEMO_EMAIL || "maria@demonstracao.com").trim().toLowerCase();
+  return { id: "demo-maria", email, name: process.env.DEMO_NAME || "Maria" };
 }
 
 function sessionSecret() {
@@ -58,6 +67,52 @@ export async function identityIdForEmail(email: string) {
 export async function hashLoginToken(token: string) {
   const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", encoder.encode(token)));
   return Array.from(digest, byte => byte.toString(16).padStart(2, "0")).join("");
+}
+
+export function passwordPolicyError(password: string) {
+  if (password.length < PASSWORD_MIN_LENGTH) return `A senha precisa ter pelo menos ${PASSWORD_MIN_LENGTH} caracteres.`;
+  if (password.length > PASSWORD_MAX_LENGTH) return `A senha pode ter no máximo ${PASSWORD_MAX_LENGTH} caracteres.`;
+  if (!/[a-z]/.test(password)) return "Inclua pelo menos uma letra minúscula.";
+  if (!/[A-Z]/.test(password)) return "Inclua pelo menos uma letra maiúscula.";
+  if (!/[0-9]/.test(password)) return "Inclua pelo menos um número.";
+  return "";
+}
+
+export async function createPasswordCredential(password: string) {
+  const error = passwordPolicyError(password);
+  if (error) throw new Error(error);
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const passwordHash = await derivePasswordHash(password, salt, PASSWORD_ITERATIONS);
+  return {
+    hash: toBase64Url(passwordHash),
+    salt: toBase64Url(salt),
+    iterations: PASSWORD_ITERATIONS,
+  };
+}
+
+export async function verifyPassword(password: string, credential: PasswordCredential) {
+  if (!credential.password_hash || !credential.password_salt || !credential.password_iterations) return false;
+  if (password.length < 1 || password.length > PASSWORD_MAX_LENGTH) return false;
+  try {
+    const actual = await derivePasswordHash(password, fromBase64Url(credential.password_salt), credential.password_iterations);
+    const expected = fromBase64Url(credential.password_hash);
+    if (actual.length !== expected.length) return false;
+    let difference = 0;
+    for (let index = 0; index < actual.length; index += 1) difference |= actual[index] ^ expected[index];
+    return difference === 0;
+  } catch {
+    return false;
+  }
+}
+
+async function derivePasswordHash(password: string, salt: Uint8Array, iterations: number) {
+  const keyMaterial = await crypto.subtle.importKey("raw", encoder.encode(password), "PBKDF2", false, ["deriveBits"]);
+  const bits = await crypto.subtle.deriveBits(
+    { name: "PBKDF2", hash: "SHA-256", salt, iterations },
+    keyMaterial,
+    256,
+  );
+  return new Uint8Array(bits);
 }
 
 export function createLoginToken() {

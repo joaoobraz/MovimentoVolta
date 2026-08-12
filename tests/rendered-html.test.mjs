@@ -45,16 +45,22 @@ test("mantém contas, produtos e jornadas individuais no código final", async (
   assert.match(readme, /Contas individuais|Privacidade e segurança/);
 });
 
-test("usa login próprio por e-mail sem depender de conta externa", async () => {
-  const [loginPage, loginForm, auth, requestLink, verifyLink] = await Promise.all([
+test("usa login próprio por e-mail e senha sem depender de conta externa", async () => {
+  const [loginPage, loginForm, setupForm, auth, loginRoute, passwordRoute, requestLink, demoRoute, adminPage] = await Promise.all([
     readFile(new URL("app/entrar/page.tsx", root), "utf8"),
-    readFile(new URL("components/EmailLoginForm.tsx", root), "utf8"),
+    readFile(new URL("components/PasswordLoginForm.tsx", root), "utf8"),
+    readFile(new URL("components/PasswordSetupForm.tsx", root), "utf8"),
     readFile(new URL("lib/auth.ts", root), "utf8"),
+    readFile(new URL("app/api/auth/login/route.ts", root), "utf8"),
+    readFile(new URL("app/api/auth/set-password/route.ts", root), "utf8"),
     readFile(new URL("app/api/auth/request-link/route.ts", root), "utf8"),
-    readFile(new URL("app/api/auth/verify/route.ts", root), "utf8"),
+    readFile(new URL("app/api/demo-auth/route.ts", root), "utf8"),
+    readFile(new URL("app/admin/page.tsx", root), "utf8"),
   ]);
-  const source = [loginPage, loginForm, auth, requestLink, verifyLink].join("\n");
-  assert.match(source, /Enviar link de acesso|link mágico|createSignedSession/);
-  assert.match(source, /HttpOnly|SameSite=Lax/);
+  const source = [loginPage, loginForm, setupForm, auth, loginRoute, passwordRoute, requestLink, demoRoute, adminPage].join("\n");
+  assert.match(source, /Criar ou recuperar senha|createPasswordCredential|verifyPassword/);
+  assert.match(source, /PBKDF2|600_000|HttpOnly|SameSite=Lax/);
+  assert.match(source, /activation|reset|auth_login_tokens/);
+  assert.match(source, /DEMO_ADMIN_EMAIL|demo-admin|Acesse o painel/);
   assert.doesNotMatch(source, /chatgpt|signin-with|oai-authenticated/i);
 });

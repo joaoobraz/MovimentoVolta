@@ -6,7 +6,7 @@ Plataforma web mobile-first com diagnóstico gratuito, produtos progressivos, á
 
 - Diagnóstico de 24 perguntas com cinco perfis, oito áreas e captura de origem.
 - Resultado personalizado e plano inicial.
-- Contas individuais protegidas por link mágico enviado ao e-mail da compra.
+- Contas individuais protegidas por e-mail e senha criada pela própria cliente.
 - Vinculação automática do diagnóstico à conta pelo e-mail informado.
 - Permissões reais por produto, aplicadas na interface e no servidor.
 - Plano de 7 dias ou Jornada de 30 dias conforme o produto adquirido.
@@ -34,7 +34,7 @@ Todos os produtos funcionam dentro do mesmo aplicativo. Cada cliente vê somente
 ```text
 app/                        páginas públicas, área protegida e administração
 app/api/data/               dados, permissões e configurações
-app/api/auth/               solicitação e validação do link mágico
+app/api/auth/               login, ativação e recuperação de senha
 app/api/webhooks/[gateway]/ eventos de pagamento assinados
 components/                 experiências públicas, da cliente e administrativas
 db/schema.ts                modelo relacional
@@ -48,7 +48,7 @@ lib/content.ts              diagnóstico, perfis, missões e SOS
 1. Copie `.env.example` para o arquivo de ambiente local.
 2. Gere `AUTH_SESSION_SECRET` com no mínimo 32 caracteres aleatórios.
 3. Informe `ADMIN_EMAILS` com os e-mails autorizados a administrar e `TESTER_EMAILS` com as contas que devem enxergar todos os produtos.
-4. Configure `RESEND_API_KEY` e `AUTH_EMAIL_FROM` para enviar os links de acesso.
+4. Configure `RESEND_API_KEY` e `AUTH_EMAIL_FROM` para enviar ativação e recuperação de senha.
 5. Cadastre no painel os links de pagamento e o identificador externo de cada produto. No Mapa, informe também o checkout combinado com Kit SOS.
 6. Configure o segredo do gateway escolhido e aponte o webhook para `/api/webhooks/<gateway>`.
 7. Cadastre a página `/obrigada` como página de confirmação na Wiapy.
@@ -64,9 +64,9 @@ Na Wiapy, o token é recebido no cabeçalho `Authorization`. Nos demais conector
 
 ## Contas individuais
 
-A cliente abre `/entrar`, informa o mesmo e-mail usado na compra e recebe um link pessoal de uso único, válido por 15 minutos. A sessão fica protegida em cookie `HttpOnly` assinado. A área `/app`, o painel `/admin` e as operações privadas validam essa sessão no servidor. Não existe senha própria nem dependência de uma conta externa.
+A Wiapy confirma o pagamento pelo webhook e o sistema libera os produtos para o e-mail da compra. No primeiro acesso, a cliente recebe um link de ativação de uso único, válido por 24 horas, e cria a própria senha. Depois disso, entra em `/entrar` com e-mail e senha. A recuperação de senha utiliza um link de uso único válido por 30 minutos. A sessão fica protegida em cookie `HttpOnly` assinado. A área `/app`, o painel `/admin` e as operações privadas validam essa sessão no servidor, sem depender de uma conta da Wiapy ou de outra plataforma externa.
 
-Em testes locais, mantenha `DEMO_MODE=true` somente no `.env.local`. O e-mail de `DEMO_EMAIL` abre a conta de teste e recebe todos os produtos através de `TESTER_EMAILS`. Nunca publique o `.env.local`.
+Em testes locais, mantenha `DEMO_MODE=true` somente no `.env.local`. A conta definida em `DEMO_EMAIL` e `DEMO_PASSWORD` abre a experiência completa da Maria. A conta separada definida em `DEMO_ADMIN_EMAIL` e `DEMO_ADMIN_PASSWORD` abre o painel administrativo sem dar permissões de gestão à Maria. Contas em `TESTER_EMAILS` recebem todos os produtos após a ativação. Nunca publique o `.env.local`.
 
 ## Privacidade e segurança
 

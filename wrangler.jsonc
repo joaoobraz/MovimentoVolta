@@ -1,0 +1,42 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "movimento-volta",
+  "account_id": "2f9112dc4b3fd1488f0d450b56c115a1",
+  "main": "vinext/server/fetch-handler",
+  "compatibility_date": "2026-05-22",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": "dist/client",
+    "not_found_handling": "none",
+    "binding": "ASSETS"
+  },
+  "observability": {
+    "enabled": true
+  },
+  "routes": [
+    {
+      "pattern": "movimentovolta.com.br",
+      "custom_domain": true
+    },
+    {
+      "pattern": "www.movimentovolta.com.br",
+      "custom_domain": true
+    }
+  ],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "movimento-volta-db",
+      "database_id": "f17441e7-a366-4acf-8b5e-1b22a9591d92",
+      "migrations_dir": "drizzle"
+    }
+  ],
+  "vars": {
+    "DEMO_MODE": "false",
+    "NEXT_PUBLIC_SITE_URL": "https://movimentovolta.com.br",
+    "BUSINESS_NAME": "Movimento Volta Pra Você",
+    "SUPPORT_EMAIL": "suporte@movimentovolta.com.br",
+    "WIAPY_COMPLETE_CHECKOUT_IDS": "6a7c1bc91943b5bbdebeb873,c42msx5o82xw,6a7c1c319df1dadce85dd516,atspo4-urojh",
+    "WIAPY_CHECKOUT_PRODUCT_MAP": "6a7c29409df1dadce85e0837:mapa,evrdhg9kbuzd:mapa,6a7c2844c558e3b229d89f0f:sos,6a7c2a27c558e3b229d8a919:desafio,6a7c2a4a9df1dadce85e0e40:jornada"
+  }
+}

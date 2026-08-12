@@ -8,7 +8,7 @@ type Identity = SessionIdentity;
 type JsonRecord = Record<string, unknown>;
 
 const requestBuckets = new Map<string, { count: number; reset: number }>();
-const productIds = ["mapa", "sos", "desafio", "jornada"] as const;
+const productIds = ["mapa", "sos", "desafio", "jornada", "completo"] as const;
 
 function json(data: unknown, status = 200) {
   return Response.json(data, { status, headers: { "Cache-Control": "no-store" } });
@@ -74,6 +74,7 @@ function catalogRow(row: JsonRecord) {
     access: String(row.description || ""),
     checkoutUrl: String(row.checkout_url || ""),
     bundleCheckoutUrl: String(row.bundle_checkout_url || ""),
+    downsellCheckoutUrl: String(row.downsell_checkout_url || ""),
     externalId: String(row.external_product_id || ""),
     status: String(row.status),
     position: Number(row.position || 0),
@@ -81,12 +82,15 @@ function catalogRow(row: JsonRecord) {
 }
 
 async function getCatalog(db: D1Database, includeInactive = false) {
-  const rows = await db.prepare(`SELECT id,slug,name,price_cents,description,checkout_url,bundle_checkout_url,external_product_id,status,position FROM products WHERE deleted_at IS NULL ${includeInactive ? "" : "AND status='active'"} ORDER BY position,id`).all<JsonRecord>();
+  const rows = await db.prepare(`SELECT id,slug,name,price_cents,description,checkout_url,bundle_checkout_url,downsell_checkout_url,external_product_id,status,position FROM products WHERE deleted_at IS NULL ${includeInactive ? "" : "AND status='active'"} ORDER BY position,id`).all<JsonRecord>();
   return rows.results.map(catalogRow);
 }
 
 function configuredAdminEmails() {
-  return new Set((process.env.ADMIN_EMAILS || "admin@demo.volta").split(",").map(value => value.trim().toLowerCase()).filter(Boolean));
+  return new Set([
+    ...(process.env.ADMIN_EMAILS || "admin@demo.volta").split(","),
+    ...(process.env.DEMO_MODE === "true" ? [process.env.DEMO_ADMIN_EMAIL || "admin@demo.volta"] : []),
+  ].map(value => value.trim().toLowerCase()).filter(Boolean));
 }
 
 function configuredTesterEmails() {
@@ -115,12 +119,12 @@ async function accessSet(db: D1Database, userId: string) {
 }
 
 function canUse(access: Set<string>, feature: "today" | "journey" | "sos" | "journal" | "community" | "checkin", day = 1) {
-  if (feature === "sos") return access.has("sos") || access.has("jornada");
-  if (feature === "journal") return access.has("mapa") || access.has("jornada");
+  if (feature === "sos") return access.has("sos") || access.has("completo") || access.has("jornada");
+  if (feature === "journal") return access.has("mapa") || access.has("completo") || access.has("jornada");
   if (feature === "community") return access.has("jornada");
-  if (feature === "checkin") return access.has("desafio") || access.has("jornada");
-  if (feature === "journey") return access.has("jornada") || (day <= 7 && (access.has("mapa") || access.has("desafio")));
-  return access.has("mapa") || access.has("desafio") || access.has("jornada");
+  if (feature === "checkin") return access.has("desafio") || access.has("completo") || access.has("jornada");
+  if (feature === "journey") return access.has("jornada") || (day <= 7 && (access.has("mapa") || access.has("desafio") || access.has("completo")));
+  return access.has("mapa") || access.has("desafio") || access.has("completo") || access.has("jornada");
 }
 
 async function queueAutomation(db: D1Database, kind: string, recipient: string, payload: JsonRecord, consent: boolean, leadId?: string, userId?: string) {
@@ -170,6 +174,7 @@ export async function GET(request: Request) {
     const purchaseTotal = purchases?.total ?? 0;
     const integrationValue = integration ? parseJson(integration.value_json) : { gateway: "", supportEmail: "", whatsapp: "" };
     const catalogConfigured = catalog.filter(product => product.status === "active").every(product => product.checkoutUrl && product.externalId);
+    const completeOffer = catalog.find(product => product.id === "completo");
     const legalConfigured = Boolean(process.env.BUSINESS_NAME && process.env.BUSINESS_DOCUMENT && process.env.BUSINESS_ADDRESS);
     const supportConfigured = Boolean(integrationValue.supportEmail || process.env.SUPPORT_EMAIL);
     const productionMode = process.env.DEMO_MODE !== "true";
@@ -187,7 +192,7 @@ export async function GET(request: Request) {
         emailConfigured: emailDeliveryConfigured() && Boolean(process.env.AUTH_SESSION_SECRET),
         wiapyConfigured: Boolean(process.env.WIAPY_WEBHOOK_TOKEN),
         catalogConfigured,
-        bundleConfigured: Boolean(catalog.find(product => product.id === "mapa")?.bundleCheckoutUrl),
+        bundleConfigured: Boolean(completeOffer?.checkoutUrl && completeOffer?.downsellCheckoutUrl),
         legalConfigured,
         supportConfigured,
         ready: productionMode && emailDeliveryConfigured() && Boolean(process.env.AUTH_SESSION_SECRET && process.env.WIAPY_WEBHOOK_TOKEN) && catalogConfigured && legalConfigured && supportConfigured,
@@ -219,7 +224,7 @@ export async function GET(request: Request) {
     access: accessRows.results,
     personalization: profile ? { profileKey: profile.profile_key, score: profile.score, result: parseJson(String(profile.result_json || "{}")), desiredArea: profile.desired_area, weightArea: profile.weight_area, availableMinutes: profile.available_minutes } : null,
     preferences: preferences || { reminders_enabled: 1, marketing_enabled: 0, theme: "light", text_size: "normal" },
-    products: await getCatalog(db),
+    products: (await getCatalog(db)).filter(product => product.id !== "completo"),
     posts: posts.results,
     likedPostIds: likes.results.map(row => row.post_id),
   });
@@ -234,7 +239,7 @@ export async function POST(request: Request) {
   const now = new Date().toISOString();
 
   if (action === "funnel") {
-    const allowed = new Set(["quiz_started", "result_viewed", "checkout_clicked", "thank_you_viewed"]);
+    const allowed = new Set(["quiz_started", "result_viewed", "checkout_clicked", "exit_offer_viewed", "exit_offer_clicked", "thank_you_viewed"]);
     const eventType = sanitizeText(body.eventType, 60);
     if (!allowed.has(eventType)) return json({ error: "Evento inválido." }, 400);
     const email = sanitizeText(body.email, 160).toLowerCase();
@@ -276,7 +281,7 @@ export async function POST(request: Request) {
     if (!admin) return json({ error: "Acesso administrativo restrito." }, 403);
     if (action === "admin.products") {
       const items = Array.isArray(body.items) ? body.items as JsonRecord[] : [];
-      const statements = items.filter(item => productIds.includes(String(item.id) as typeof productIds[number])).map((item, index) => db.prepare(`UPDATE products SET name=?,price_cents=?,description=?,checkout_url=?,bundle_checkout_url=?,external_product_id=?,status=?,position=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`).bind(sanitizeText(item.name, 120), Math.max(0, Math.round(Number(item.price) * 100)), sanitizeText(item.access, 1000), sanitizeText(item.checkoutUrl, 500) || null, sanitizeText(item.bundleCheckoutUrl, 500) || null, sanitizeText(item.externalId, 180) || null, item.status === "inactive" ? "inactive" : "active", Number(item.position) || index + 1, String(item.id)));
+      const statements = items.filter(item => productIds.includes(String(item.id) as typeof productIds[number])).map((item, index) => db.prepare(`UPDATE products SET name=?,price_cents=?,description=?,checkout_url=?,bundle_checkout_url=?,downsell_checkout_url=?,external_product_id=?,status=?,position=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`).bind(sanitizeText(item.name, 120), Math.max(0, Math.round(Number(item.price) * 100)), sanitizeText(item.access, 1000), sanitizeText(item.checkoutUrl, 500) || null, sanitizeText(item.bundleCheckoutUrl, 500) || null, sanitizeText(item.downsellCheckoutUrl, 500) || null, sanitizeText(item.externalId, 180) || null, item.status === "inactive" ? "inactive" : "active", Number(item.position) || index + 1, String(item.id)));
       if (statements.length) await db.batch(statements);
       return json({ ok: true });
     }
