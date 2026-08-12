@@ -6,6 +6,20 @@ export type PasswordPurpose = "activation" | "reset";
 
 type AccountRow = { id: string; password_hash: string | null };
 
+function isLocalOrigin(origin: string) {
+  try {
+    const hostname = new URL(origin).hostname.toLowerCase();
+    return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
+  } catch { return true; }
+}
+
+export function publicAppOrigin(requestUrl: string) {
+  const requestOrigin = new URL(requestUrl).origin.replace(/\/$/, "");
+  if (!isLocalOrigin(requestOrigin)) return requestOrigin;
+  const configuredOrigin = String(process.env.NEXT_PUBLIC_SITE_URL || "").trim().replace(/\/$/, "");
+  return configuredOrigin || requestOrigin;
+}
+
 function configuredAccessEmails() {
   return new Set(`${process.env.ADMIN_EMAILS || ""},${process.env.TESTER_EMAILS || ""}`
     .split(",")
@@ -40,7 +54,7 @@ export async function issuePasswordToken(db: D1Database, email: string, purpose:
     db.prepare(`UPDATE auth_login_tokens SET used_at=? WHERE lower(email)=? AND purpose=? AND used_at IS NULL`).bind(now, normalized, purpose),
     db.prepare(`INSERT INTO auth_login_tokens (id,email,token_hash,purpose,expires_at) VALUES (?,?,?,?,?)`).bind(tokenId, normalized, tokenHash, purpose, expiresAt),
   ]);
-  const origin = (process.env.NEXT_PUBLIC_SITE_URL || new URL(requestUrl).origin).replace(/\/$/, "");
+  const origin = publicAppOrigin(requestUrl);
   return { tokenId, link: `${origin}/ativar?token=${encodeURIComponent(token)}`, expiresAt };
 }
 

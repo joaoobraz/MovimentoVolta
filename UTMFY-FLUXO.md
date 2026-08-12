@@ -9,6 +9,18 @@
 5. A UTMfy relaciona a venda à campanha e à conta de anúncios da Meta.
 6. O webhook separado do Movimento Volta recebe a mesma aprovação para liberar o produto e enviar o e-mail de acesso.
 
+## Quais vendas chegam à UTMfy
+
+Como a integração está vinculada aos checkouts da Wiapy, todas as vendas desses checkouts são enviadas, mesmo quando a cliente não veio de anúncio.
+
+- Facebook ou Instagram com UTMs: campanha, conjunto e criativo podem ser identificados.
+- Google Ads com UTMs e `gclid`: a campanha paga pode ser identificada.
+- Pesquisa orgânica no Google: a venda chega, mas pode aparecer como orgânica ou sem atribuição se não houver parâmetros.
+- Link compartilhado por uma amiga: a venda chega, mas normalmente aparece como direta ou referência, salvo se o link compartilhado tiver UTMs.
+- Acesso digitando o domínio: a venda chega como direta ou sem atribuição.
+
+A confirmação da venda não depende do Facebook. Os parâmetros servem para explicar de onde a cliente veio.
+
 ## Configuração na Wiapy
 
 - Integrações > UTMfy

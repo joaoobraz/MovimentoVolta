@@ -66,13 +66,15 @@ test("usa login próprio por e-mail e senha sem depender de conta externa", asyn
 });
 
 test("não libera Pix pendente e exige WhatsApp brasileiro completo", async () => {
-  const [webhookRoute, quiz, dataRoute] = await Promise.all([
+  const [webhookRoute, quiz, dataRoute, passwordAccess] = await Promise.all([
     readFile(new URL("app/api/webhooks/[gateway]/route.ts", root), "utf8"),
     readFile(new URL("components/QuizExperience.tsx", root), "utf8"),
     readFile(new URL("app/api/data/route.ts", root), "utf8"),
+    readFile(new URL("lib/password-access.ts", root), "utf8"),
   ]);
   assert.match(webhookRoute, /statusSignals\.has\(value\)/);
   assert.doesNotMatch(webhookRoute, /statusValue\.includes\(value\)/);
   assert.match(quiz, /formatBrazilianPhone|DDD e nove dígitos/);
   assert.match(dataRoute, /phoneDigits\.length !== 11/);
+  assert.match(passwordAccess, /if \(!isLocalOrigin\(requestOrigin\)\) return requestOrigin/);
 });

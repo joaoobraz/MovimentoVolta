@@ -1,6 +1,6 @@
 import { ensureCoreDb, getD1, newId, sanitizeText } from "@/db/runtime";
 import { emailFrame, escapeHtml, sendEmail } from "@/lib/email";
-import { issuePasswordToken, passwordAccountState } from "@/lib/password-access";
+import { issuePasswordToken, passwordAccountState, publicAppOrigin } from "@/lib/password-access";
 
 export const dynamic = "force-dynamic";
 
@@ -161,7 +161,7 @@ export async function POST(request: Request, context: { params: Promise<{ gatewa
     await db.prepare(`INSERT INTO funnel_events (id,event_type,user_id,email,product_id,metadata_json) VALUES (?,'purchase_approved',(SELECT id FROM users WHERE lower(email)=? LIMIT 1),?,?,?)`).bind(newId("funnel"), email, email, products.map(product => product.id).join("+"), JSON.stringify({ gateway, paymentMethod: sanitizeText(payment.method, 40) })).run();
     const productNames = products.map(product => product.name).join(", ");
     const accountState = await passwordAccountState(email, db);
-    const origin = (process.env.NEXT_PUBLIC_SITE_URL || new URL(request.url).origin).replace(/\/$/, "");
+    const origin = publicAppOrigin(request.url);
     const issued = accountState.hasPassword ? null : await issuePasswordToken(db, email, "activation", request.url);
     const accessUrl = issued?.link || `${origin}/entrar?email=${encodeURIComponent(email)}`;
     const subject = accountState.hasPassword
