@@ -9,10 +9,8 @@ declare global {
   }
 }
 
-const consentKey = "volta-cookies";
-
 function initialize(pixelId: string) {
-  if (!pixelId || localStorage.getItem(consentKey) !== "marketing" || window.fbq) return;
+  if (!pixelId || window.fbq) return;
   const fbq = function (...args: unknown[]) {
     if (fbq.callMethod) fbq.callMethod(...args);
     else (fbq.queue ||= []).push(args);
@@ -31,10 +29,7 @@ function initialize(pixelId: string) {
 
 export function MarketingPixel({ pixelId }: { pixelId: string }) {
   useEffect(() => {
-    const activate = () => initialize(pixelId);
-    activate();
-    window.addEventListener("volta-marketing-consent", activate);
-    return () => window.removeEventListener("volta-marketing-consent", activate);
+    initialize(pixelId);
   }, [pixelId]);
   return null;
 }

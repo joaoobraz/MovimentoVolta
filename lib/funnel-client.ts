@@ -1,7 +1,7 @@
 export type FunnelEvent = "quiz_started" | "lead_submitted" | "result_viewed" | "checkout_clicked" | "exit_offer_viewed" | "exit_offer_clicked" | "thank_you_viewed";
 
 function trackMarketing(event: FunnelEvent, data: Record<string, unknown>, eventId: string) {
-  if (localStorage.getItem("volta-cookies") !== "marketing" || !window.fbq) return;
+  if (!window.fbq) return;
   const payload = { content_name: String(data.productId || data.profileKey || "Movimento Volta"), content_category: String(data.source || event) };
   if (event === "lead_submitted") window.fbq("track", "Lead", payload, { eventID: eventId });
   else if (event === "checkout_clicked") window.fbq("track", "InitiateCheckout", payload, { eventID: eventId });

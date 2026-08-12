@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { Geist, Geist_Mono } from "next/font/google";
 import { AttributionCapture } from "@/components/AttributionCapture";
-import { EssentialCookieNotice } from "@/components/LandingInteractions";
 import { MarketingPixel } from "@/components/MarketingPixel";
 import "./globals.css";
 
@@ -62,7 +61,6 @@ export default function RootLayout({
         <AttributionCapture />
         <MarketingPixel pixelId={process.env.NEXT_PUBLIC_META_PIXEL_ID || ""} />
         {children}
-        <EssentialCookieNotice />
       </body>
     </html>
   );
