@@ -204,7 +204,7 @@ export async function GET(request: Request) {
   if (!identity) return json({ error: "Entre na sua conta para continuar." }, 401);
   const accessRows = await db.prepare(`SELECT product_id,status,expires_at FROM user_access WHERE user_id=? AND status='active'`).bind(identity.id).all<JsonRecord>();
   const access = new Set(accessRows.results.map(row => String(row.product_id)));
-  const [missions, checkins, journal, points, profile, preferences, posts, likes] = await Promise.all([
+  const [missions, checkins, journal, points, profile, preferences, posts, likes, notifications] = await Promise.all([
     db.prepare(`SELECT * FROM user_missions WHERE user_id=? ORDER BY first_completed_at DESC`).bind(identity.id).all<JsonRecord>(),
     canUse(access, "checkin") ? db.prepare(`SELECT * FROM daily_checkins WHERE user_id=? ORDER BY checkin_date DESC LIMIT 31`).bind(identity.id).all<JsonRecord>() : Promise.resolve({ results: [] as JsonRecord[] }),
     canUse(access, "journal") ? db.prepare(`SELECT * FROM journal_entries WHERE user_id=? AND deleted_at IS NULL ORDER BY entry_date DESC,created_at DESC LIMIT 100`).bind(identity.id).all<JsonRecord>() : Promise.resolve({ results: [] as JsonRecord[] }),
@@ -213,6 +213,7 @@ export async function GET(request: Request) {
     db.prepare(`SELECT reminders_enabled,marketing_enabled,theme,text_size FROM user_preferences WHERE user_id=?`).bind(identity.id).first<JsonRecord>(),
     canUse(access, "community") ? db.prepare(`SELECT p.*,COALESCE(u.name,'Movimento Volta Pra Você') AS name,(SELECT COUNT(*) FROM community_likes l WHERE l.post_id=p.id) AS likes FROM community_posts p LEFT JOIN users u ON u.id=p.user_id WHERE p.status='published' AND p.deleted_at IS NULL ${process.env.DEMO_MODE === "true" ? "" : "AND p.user_id NOT LIKE 'demo-%'"} ORDER BY p.pinned DESC,p.created_at DESC LIMIT 50`).all<JsonRecord>() : Promise.resolve({ results: [] as JsonRecord[] }),
     canUse(access, "community") ? db.prepare(`SELECT post_id FROM community_likes WHERE user_id=?`).bind(identity.id).all<{ post_id: string }>() : Promise.resolve({ results: [] as { post_id: string }[] }),
+    db.prepare(`SELECT id,kind,title,body,created_at FROM notifications WHERE user_id=? AND read_at IS NULL ORDER BY created_at DESC LIMIT 8`).bind(identity.id).all<JsonRecord>(),
   ]);
   return json({
     user: identity,
@@ -227,6 +228,7 @@ export async function GET(request: Request) {
     products: (await getCatalog(db)).filter(product => product.id !== "completo"),
     posts: posts.results,
     likedPostIds: likes.results.map(row => row.post_id),
+    notifications: notifications.results,
   });
 }
 
@@ -239,7 +241,7 @@ export async function POST(request: Request) {
   const now = new Date().toISOString();
 
   if (action === "funnel") {
-    const allowed = new Set(["quiz_started", "result_viewed", "checkout_clicked", "exit_offer_viewed", "exit_offer_clicked", "thank_you_viewed"]);
+    const allowed = new Set(["quiz_started", "lead_submitted", "result_viewed", "checkout_clicked", "exit_offer_viewed", "exit_offer_clicked", "thank_you_viewed"]);
     const eventType = sanitizeText(body.eventType, 60);
     if (!allowed.has(eventType)) return json({ error: "Evento inválido." }, 400);
     const email = sanitizeText(body.email, 160).toLowerCase();
@@ -324,6 +326,13 @@ export async function POST(request: Request) {
   if (!identity) return json({ error: "Entre na sua conta para continuar." }, 401);
   const access = await accessSet(db, identity.id);
 
+  if (action === "notification.read") {
+    const notificationId = sanitizeText(body.id, 160);
+    if (!notificationId) return json({ error: "Notificação inválida." }, 400);
+    await db.prepare(`UPDATE notifications SET read_at=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND user_id=?`).bind(now, notificationId, identity.id).run();
+    return json({ ok: true });
+  }
+
   if (action === "mission") {
     const missionId = sanitizeText(body.missionId, 50);
     const day = Number.parseInt(missionId.replace(/\D/g, ""), 10) || 1;
@@ -332,6 +341,15 @@ export async function POST(request: Request) {
     if (existing) await db.prepare(`UPDATE user_missions SET status='completed',response=?,last_completed_at=?,completion_count=completion_count+1,updated_at=CURRENT_TIMESTAMP WHERE id=?`).bind(sanitizeText(body.response, 2000), now, existing.id).run();
     else await db.prepare(`INSERT INTO user_missions (id,user_id,mission_id,response,status,first_completed_at,last_completed_at,completion_count) VALUES (?,?,?,?,'completed',?,?,1)`).bind(newId("um"), identity.id, missionId, sanitizeText(body.response, 2000), now, now).run();
     await award(db, identity.id, "mission.completed", 10, missionId);
+    if (day === 7 && !access.has("jornada")) {
+      await db.prepare(`INSERT OR IGNORE INTO notifications (id,user_id,kind,title,body) VALUES (?,?,?,?,?)`).bind(
+        `journey-ready-${identity.id}`,
+        identity.id,
+        "journey_ready",
+        "Você concluiu seu primeiro ciclo de 7 dias.",
+        "A Jornada VOLTA de 30 dias já pode ser seu próximo passo para consolidar o que começou.",
+      ).run();
+    }
     return json({ ok: true });
   }
   if (action === "checkin") {

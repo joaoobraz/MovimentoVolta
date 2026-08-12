@@ -1,10 +1,16 @@
 import Image from "next/image";
 import { SafeLink as Link } from "@/components/SafeLink";
-import { EssentialCookieNotice, PublicAccessibilityTools, PublicNavigation, SpeakIntroduction } from "@/components/LandingInteractions";
-import { phases, products } from "@/lib/content";
+import { PublicAccessibilityTools, PublicNavigation, SpeakIntroduction } from "@/components/LandingInteractions";
+import { phases } from "@/lib/content";
 
 const pains = ["Você resolve tudo para todos.", "Suas prioridades ficam sempre para depois.", "Sente culpa quando descansa.", "Começa projetos pessoais e abandona.", "Não lembra da última vez em que fez algo apenas por você.", "Os dias passam, mas sua vida pessoal não avança."];
 const benefits = ["Recuperar espaço na rotina", "Retomar projetos pessoais", "Identificar excessos", "Organizar prioridades", "Criar pequenos hábitos", "Registrar conquistas", "Desenvolver limites cotidianos", "Sair gradualmente do piloto automático", "Fazer algo por si todos os dias"];
+const journeyStages = [
+  { tag: "Descoberta", title: "Entenda seu momento", text: "Responda ao diagnóstico e veja quais áreas da sua vida estão pedindo mais espaço." },
+  { tag: "Primeiro movimento", title: "Receba uma direção", text: "Seu perfil transforma as respostas em um ponto de partida curto e possível." },
+  { tag: "Continuidade", title: "Avance no seu ritmo", text: "Novas etapas aparecem dentro da mesma conta, preservando seu progresso e seus registros." },
+  { tag: "Consolidação", title: "Proteja o que mudou", text: "Quando fizer sentido, aprofunde a experiência com acompanhamento e comunidade." },
+];
 const faqs = [
   ["O diagnóstico é gratuito?", "Sim. Você pode responder ao diagnóstico e receber seu perfil resumido sem pagar."],
   ["Quanto tempo demora?", "Menos de três minutos, em média. As perguntas aparecem uma por vez."],
@@ -16,7 +22,6 @@ const faqs = [
   ["Posso fazer no meu ritmo?", "Sim. Missões anteriores permanecem acessíveis e a liberação pode ser diária ou livre."],
 ];
 export function LandingPage() {
-  const publicProducts = products.filter(product => product.id !== "completo");
   return <div className="public-shell">
     <a className="skip-link" href="#conteudo">Pular para o conteúdo</a>
     <header className="site-header">
@@ -56,7 +61,7 @@ export function LandingPage() {
 
       <section className="method-section section-pad" id="metodo"><div className="section-heading"><span className="eyebrow light">Método VOLTA</span><h2>Cinco movimentos para voltar a ocupar espaço na própria vida.</h2></div><div className="method-track">{phases.map((p)=><article key={p.letter}><span className="method-letter">{p.letter}</span><div><h3>{p.name}</h3><p>{p.description}</p></div></article>)}</div></section>
 
-      <section className="product-ladder section-pad" id="produtos"><div className="section-heading"><span className="eyebrow">Uma esteira, uma só conta</span><h2>Comece pequeno. Avance quando a próxima etapa fizer sentido.</h2><p>Todos os produtos funcionam dentro da mesma plataforma. Cada compra libera uma nova etapa e preserva seu perfil, seu progresso e seus registros.</p></div><div className="ladder-grid">{publicProducts.map((product, index) => <article key={product.id}><em>{index === 0 ? "Primeiro passo" : `Etapa ${index + 1}`}</em><span>{String(index + 1).padStart(2, "0")}</span><h3>{product.name}</h3><p>{product.access}</p><strong>R$ {product.price.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</strong><Link href="/quiz">Descobrir meu perfil →</Link></article>)}</div><div className="evidence-card"><div><span className="eyebrow light">Confiança antes da pressa</span><h3>Sem depoimentos inventados, contadores falsos ou promessas impossíveis.</h3></div><p>A recomendação nasce das respostas do quiz. Preços, entregáveis e acesso são mostrados com clareza antes da compra.</p></div></section>
+      <section className="product-ladder section-pad" id="produtos"><div className="section-heading"><span className="eyebrow">Uma experiência, uma só conta</span><h2>Primeiro você se reconhece. Depois escolhe como deseja avançar.</h2><p>A página inicial não decide por você. As opções, entregáveis e valores aparecem somente depois do diagnóstico, quando já existe contexto para uma recomendação individual.</p></div><div className="ladder-grid">{journeyStages.map((stage, index) => <article key={stage.tag}><em>{stage.tag}</em><span>{String(index + 1).padStart(2, "0")}</span><h3>{stage.title}</h3><p>{stage.text}</p></article>)}</div><div className="ladder-cta"><Link href="/quiz" className="button">Descobrir meu próximo passo</Link><small>Diagnóstico gratuito, privado e com menos de três minutos.</small></div><div className="evidence-card"><div><span className="eyebrow light">Confiança antes da pressa</span><h3>Sem depoimentos inventados, contadores falsos ou promessas impossíveis.</h3></div><p>A recomendação nasce das respostas do quiz. Preços, entregáveis e acesso são mostrados com clareza antes da compra.</p></div></section>
 
       <section className="quiz-cta section-pad"><span className="eyebrow light">Seu primeiro passo</span><h2>Antes de mudar sua rotina, descubra onde você se deixou para depois.</h2><Link href="/quiz" className="button button-light">Começar diagnóstico gratuito</Link><p>Gratuito · privado · menos de 3 minutos</p></section>
 
@@ -66,6 +71,5 @@ export function LandingPage() {
     <footer className="site-footer"><div className="footer-brand"><div className="brand"><span className="brand-mark">V</span><span>Volta Pra <em>Você</em></span></div><p>“Eu não me abandono mais.”</p></div><div><h3>Movimento</h3><Link href="/quiz">Diagnóstico gratuito</Link><Link href="/entrar">Entrar na conta</Link><a href="#metodo">Método VOLTA</a></div><div><h3>Informações</h3><Link href="/legal#termos">Termos de uso</Link><Link href="/legal#privacidade">Privacidade e LGPD</Link><Link href="/legal#cookies">Política de cookies</Link><Link href="/legal#contato">Contato</Link></div><div className="footer-warning"><h3>Um aviso importante</h3><p>Esta plataforma oferece apoio de organização e reflexão. Não substitui acompanhamento médico ou psicológico.</p></div><small className="copyright">© {new Date().getFullYear()} Movimento Volta Pra Você. Todos os direitos reservados.</small></footer>
 
     <PublicAccessibilityTools />
-    <EssentialCookieNotice />
   </div>;
 }

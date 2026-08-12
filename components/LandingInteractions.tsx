@@ -1,4 +1,5 @@
 "use client";
+/* eslint-disable react-hooks/set-state-in-effect */
 
 import { useEffect, useState } from "react";
 import { SafeLink as Link } from "@/components/SafeLink";
@@ -60,11 +61,17 @@ export function PublicAccessibilityTools() {
 export function EssentialCookieNotice() {
   const [visible, setVisible] = useState(false);
 
-  useEffect(() => { setVisible(localStorage.getItem("volta-cookies") !== "accepted"); }, []);
+  useEffect(() => { setVisible(!["essential", "marketing"].includes(localStorage.getItem("volta-cookies") || "")); }, []);
   if (!visible) return null;
+
+  function choose(value: "essential" | "marketing") {
+    localStorage.setItem("volta-cookies", value);
+    setVisible(false);
+    if (value === "marketing") window.dispatchEvent(new Event("volta-marketing-consent"));
+  }
 
   return <div className="cookie-banner" role="dialog" aria-label="Preferências de cookies">
     <div><strong>Sua privacidade importa.</strong><p>Usamos apenas dados necessários para a experiência. Marketing só é ativado com consentimento.</p></div>
-    <div><Link href="/legal#cookies" className="text-button">Ver política</Link><button className="button button-small" onClick={() => { localStorage.setItem("volta-cookies", "accepted"); setVisible(false); }}>Aceitar essenciais</button></div>
+    <div><Link href="/legal#cookies" className="text-button">Ver política</Link><button className="button button-small button-secondary" onClick={() => choose("essential")}>Somente essenciais</button><button className="button button-small" onClick={() => choose("marketing")}>Aceitar marketing</button></div>
   </div>;
 }

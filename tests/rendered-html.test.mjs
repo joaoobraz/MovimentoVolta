@@ -80,16 +80,26 @@ test("não libera Pix pendente e exige WhatsApp brasileiro completo", async () =
   assert.match(passwordAccess, /if \(!isLocalOrigin\(requestOrigin\)\) return requestOrigin/);
 });
 
-test("mantém a vitrine rápida e a esteira sem recomendar itens já incluídos", async () => {
-  const [landing, interactions, member, css] = await Promise.all([
+test("mantém preços após o quiz e uma esteira progressiva com consentimento", async () => {
+  const [landing, interactions, result, member, dataRoute, pixel, funnel, css] = await Promise.all([
     readFile(new URL("components/LandingPage.tsx", root), "utf8"),
     readFile(new URL("components/LandingInteractions.tsx", root), "utf8"),
+    readFile(new URL("components/ResultPage.tsx", root), "utf8"),
     readFile(new URL("components/MemberApp.tsx", root), "utf8"),
+    readFile(new URL("app/api/data/route.ts", root), "utf8"),
+    readFile(new URL("components/MarketingPixel.tsx", root), "utf8"),
+    readFile(new URL("lib/funnel-client.ts", root), "utf8"),
     readFile(new URL("app/globals.css", root), "utf8"),
   ]);
   assert.doesNotMatch(landing, /mode=catalog|useEffect|useState/);
-  assert.match(landing, /hero-v1\.webp|Todos os produtos funcionam dentro da mesma plataforma/);
-  assert.match(interactions, /PublicNavigation|EssentialCookieNotice|volta-text-size/);
-  assert.match(member, /expandedAccess|volta-saved-posts|A comunidade está começando/);
+  assert.match(landing, /hero-v1\.webp|valores aparecem somente depois do diagnóstico/);
+  assert.doesNotMatch(landing, /R\$|product\.price|checkoutUrl/);
+  assert.match(result, /Opção essencial|Melhor escolha para avançar|R\$ 17,00|exit_offer_clicked/);
+  assert.match(interactions, /PublicNavigation|EssentialCookieNotice|volta-text-size|Aceitar marketing|Somente essenciais/);
+  assert.match(member, /expandedAccess|volta-saved-posts|A comunidade está começando|Libera após seu primeiro ciclo|notification\.read/);
+  assert.match(dataRoute, /journey-ready-|read_at IS NULL|notification\.read/);
+  assert.match(pixel, /volta-marketing-consent|PageView|pixelId/);
+  assert.match(funnel, /Lead|InitiateCheckout/);
+  assert.doesNotMatch(funnel, /event === "thank_you_viewed".*Purchase/);
   assert.match(css, /product-ladder \.section-heading h2\{line-height:1\.12;margin-bottom:24px/);
 });
