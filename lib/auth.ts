@@ -17,8 +17,10 @@ export const DEMO_SESSION_COOKIE = "volta-demo-session";
 export const SESSION_MAX_AGE = 60 * 60 * 24 * 30;
 
 const encoder = new TextEncoder();
-export const PASSWORD_ITERATIONS = 600_000;
-export const PASSWORD_MIN_LENGTH = 10;
+// Mantém o custo compatível com o limite de execução do Cloudflare Workers.
+// O valor usado em cada conta fica salvo junto do hash, permitindo aumentos futuros.
+export const PASSWORD_ITERATIONS = 100_000;
+export const PASSWORD_MIN_LENGTH = 8;
 export const PASSWORD_MAX_LENGTH = 128;
 
 function toBase64Url(bytes: Uint8Array) {
@@ -27,7 +29,7 @@ function toBase64Url(bytes: Uint8Array) {
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
 }
 
-function fromBase64Url(value: string) {
+function fromBase64Url(value: string): Uint8Array<ArrayBuffer> {
   const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
   const binary = atob(normalized + "=".repeat((4 - normalized.length % 4) % 4));
   return Uint8Array.from(binary, character => character.charCodeAt(0));
@@ -75,6 +77,7 @@ export function passwordPolicyError(password: string) {
   if (!/[a-z]/.test(password)) return "Inclua pelo menos uma letra minúscula.";
   if (!/[A-Z]/.test(password)) return "Inclua pelo menos uma letra maiúscula.";
   if (!/[0-9]/.test(password)) return "Inclua pelo menos um número.";
+  if (!/[^A-Za-z0-9]/.test(password)) return "Inclua pelo menos um caractere especial, como !, @ ou #.";
   return "";
 }
 
@@ -105,7 +108,7 @@ export async function verifyPassword(password: string, credential: PasswordCrede
   }
 }
 
-async function derivePasswordHash(password: string, salt: Uint8Array, iterations: number) {
+async function derivePasswordHash(password: string, salt: Uint8Array<ArrayBuffer>, iterations: number) {
   const keyMaterial = await crypto.subtle.importKey("raw", encoder.encode(password), "PBKDF2", false, ["deriveBits"]);
   const bits = await crypto.subtle.deriveBits(
     { name: "PBKDF2", hash: "SHA-256", salt, iterations },

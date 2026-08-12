@@ -59,7 +59,8 @@ test("usa login próprio por e-mail e senha sem depender de conta externa", asyn
   ]);
   const source = [loginPage, loginForm, setupForm, auth, loginRoute, passwordRoute, requestLink, demoRoute, adminPage].join("\n");
   assert.match(source, /Criar ou recuperar senha|createPasswordCredential|verifyPassword/);
-  assert.match(source, /PBKDF2|600_000|HttpOnly|SameSite=Lax/);
+  assert.match(source, /PBKDF2|PASSWORD_ITERATIONS|HttpOnly|SameSite=Lax/);
+  assert.match(source, /PASSWORD_MIN_LENGTH = 8|caractere especial|Mostrar senha|Mostrar confirmação da senha/);
   assert.match(source, /activation|reset|auth_login_tokens/);
   assert.match(source, /DEMO_ADMIN_EMAIL|demo-admin|Acesse o painel/);
   assert.doesNotMatch(source, /chatgpt|signin-with|oai-authenticated/i);
