@@ -61,7 +61,12 @@ export function PublicAccessibilityTools() {
 export function EssentialCookieNotice() {
   const [visible, setVisible] = useState(false);
 
-  useEffect(() => { setVisible(!["essential", "marketing"].includes(localStorage.getItem("volta-cookies") || "")); }, []);
+  useEffect(() => {
+    setVisible(!["essential", "marketing"].includes(localStorage.getItem("volta-cookies") || ""));
+    const openPreferences = () => setVisible(true);
+    window.addEventListener("volta-open-cookie-preferences", openPreferences);
+    return () => window.removeEventListener("volta-open-cookie-preferences", openPreferences);
+  }, []);
   if (!visible) return null;
 
   function choose(value: "essential" | "marketing") {
@@ -74,4 +79,14 @@ export function EssentialCookieNotice() {
     <div><strong>Sua privacidade importa.</strong><p>Usamos apenas dados necessários para a experiência. Marketing só é ativado com consentimento.</p></div>
     <div><Link href="/legal#cookies" className="text-button">Ver política</Link><button className="button button-small button-secondary" onClick={() => choose("essential")}>Somente essenciais</button><button className="button button-small" onClick={() => choose("marketing")}>Aceitar marketing</button></div>
   </div>;
+}
+
+export function CookieSettingsButton() {
+  return <button
+    type="button"
+    className="footer-cookie-button"
+    onClick={() => window.dispatchEvent(new Event("volta-open-cookie-preferences"))}
+  >
+    Preferências de cookies
+  </button>;
 }

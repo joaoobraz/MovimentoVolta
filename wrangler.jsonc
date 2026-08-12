@@ -34,6 +34,7 @@
   "vars": {
     "DEMO_MODE": "false",
     "NEXT_PUBLIC_SITE_URL": "https://movimentovolta.com.br",
+    "NEXT_PUBLIC_META_PIXEL_ID": "1568153188087006",
     "BUSINESS_NAME": "Movimento Volta Pra Você",
     "SUPPORT_EMAIL": "suporte@movimentovolta.com.br",
     "AUTH_EMAIL_FROM": "Movimento Volta Pra Você <acesso@movimentovolta.com.br>",

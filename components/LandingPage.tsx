@@ -1,6 +1,6 @@
 import Image from "next/image";
 import { SafeLink as Link } from "@/components/SafeLink";
-import { PublicAccessibilityTools, PublicNavigation, SpeakIntroduction } from "@/components/LandingInteractions";
+import { CookieSettingsButton, PublicAccessibilityTools, PublicNavigation, SpeakIntroduction } from "@/components/LandingInteractions";
 import { phases } from "@/lib/content";
 
 const pains = ["Você resolve tudo para todos.", "Suas prioridades ficam sempre para depois.", "Sente culpa quando descansa.", "Começa projetos pessoais e abandona.", "Não lembra da última vez em que fez algo apenas por você.", "Os dias passam, mas sua vida pessoal não avança."];
@@ -68,7 +68,7 @@ export function LandingPage() {
       <section className="faq-section section-pad" id="duvidas"><div className="section-heading compact"><span className="eyebrow">Perguntas frequentes</span><h2>O que você talvez queira saber.</h2></div><div className="faq-list">{faqs.map(([q,a])=><details key={q}><summary>{q}<span>+</span></summary><p>{a}</p></details>)}</div></section>
     </main>
 
-    <footer className="site-footer"><div className="footer-brand"><div className="brand"><span className="brand-mark">V</span><span>Volta Pra <em>Você</em></span></div><p>“Eu não me abandono mais.”</p></div><div><h3>Movimento</h3><Link href="/quiz">Diagnóstico gratuito</Link><Link href="/entrar">Entrar na conta</Link><a href="#metodo">Método VOLTA</a></div><div><h3>Informações</h3><Link href="/legal#termos">Termos de uso</Link><Link href="/legal#privacidade">Privacidade e LGPD</Link><Link href="/legal#cookies">Política de cookies</Link><Link href="/legal#contato">Contato</Link></div><div className="footer-warning"><h3>Um aviso importante</h3><p>Esta plataforma oferece apoio de organização e reflexão. Não substitui acompanhamento médico ou psicológico.</p></div><small className="copyright">© {new Date().getFullYear()} Movimento Volta Pra Você. Todos os direitos reservados.</small></footer>
+    <footer className="site-footer"><div className="footer-brand"><div className="brand"><span className="brand-mark">V</span><span>Volta Pra <em>Você</em></span></div><p>“Eu não me abandono mais.”</p></div><div><h3>Movimento</h3><Link href="/quiz">Diagnóstico gratuito</Link><Link href="/entrar">Entrar na conta</Link><a href="#metodo">Método VOLTA</a></div><div><h3>Informações</h3><Link href="/legal#termos">Termos de uso</Link><Link href="/legal#privacidade">Privacidade e LGPD</Link><Link href="/legal#cookies">Política de cookies</Link><CookieSettingsButton /><Link href="/legal#contato">Contato</Link></div><div className="footer-warning"><h3>Um aviso importante</h3><p>Esta plataforma oferece apoio de organização e reflexão. Não substitui acompanhamento médico ou psicológico.</p></div><small className="copyright">© {new Date().getFullYear()} Movimento Volta Pra Você. Todos os direitos reservados.</small></footer>
 
     <PublicAccessibilityTools />
   </div>;
