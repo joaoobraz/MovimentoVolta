@@ -153,7 +153,7 @@ export async function GET(request: Request) {
       return json({ user, access: access.results });
     }
 
-    const [leadCount, userCount, attempts, purchases, missionsDone, activeUsers, profileRows, leadsRows, reportsRows, automations, integration, funnelRows, catalog] = await Promise.all([
+    const [leadCount, userCount, attempts, purchases, missionsDone, activeUsers, profileRows, leadsRows, reportsRows, automations, integration, funnelRows, detailedFunnelRows, questionFunnelRows, sourceFunnelRows, detailedStart, recentPurchases, catalog] = await Promise.all([
       db.prepare(`SELECT COUNT(*) AS total FROM leads WHERE deleted_at IS NULL`).first<{ total: number }>(),
       db.prepare(`SELECT COUNT(*) AS total FROM users WHERE deleted_at IS NULL`).first<{ total: number }>(),
       db.prepare(`SELECT COUNT(*) AS total FROM quiz_attempts WHERE status='completed'`).first<{ total: number }>(),
@@ -166,10 +166,26 @@ export async function GET(request: Request) {
       db.prepare(`SELECT kind,enabled,requires_consent,template_json FROM automation_settings ORDER BY kind`).all<JsonRecord>(),
       db.prepare(`SELECT value_json FROM system_settings WHERE key='integrations'`).first<{ value_json: string }>(),
       db.prepare(`SELECT event_type,COUNT(*) AS total FROM funnel_events GROUP BY event_type`).all<JsonRecord>(),
+      db.prepare(`SELECT event_type,COUNT(DISTINCT json_extract(metadata_json,'$.visitId')) AS total FROM funnel_events WHERE CAST(json_extract(metadata_json,'$.trackingVersion') AS INTEGER)>=2 AND julianday(created_at)>=julianday('now','-30 day') GROUP BY event_type`).all<JsonRecord>(),
+      db.prepare(`SELECT event_type,CAST(json_extract(metadata_json,'$.questionIndex') AS INTEGER) AS question_index,json_extract(metadata_json,'$.questionId') AS question_id,COUNT(DISTINCT json_extract(metadata_json,'$.visitId')) AS total FROM funnel_events WHERE event_type IN ('quiz_question_viewed','quiz_question_answered','quiz_abandoned') AND CAST(json_extract(metadata_json,'$.trackingVersion') AS INTEGER)>=2 AND julianday(created_at)>=julianday('now','-30 day') GROUP BY event_type,question_index,question_id ORDER BY question_index`).all<JsonRecord>(),
+      db.prepare(`SELECT COALESCE(NULLIF(json_extract(metadata_json,'$.utmSource'),''),NULLIF(json_extract(metadata_json,'$.source'),''),'Acesso direto') AS source,COUNT(DISTINCT json_extract(metadata_json,'$.visitId')) AS total FROM funnel_events WHERE event_type='quiz_page_viewed' AND CAST(json_extract(metadata_json,'$.trackingVersion') AS INTEGER)>=2 AND julianday(created_at)>=julianday('now','-30 day') GROUP BY source ORDER BY total DESC LIMIT 8`).all<JsonRecord>(),
+      db.prepare(`SELECT MIN(created_at) AS started_at FROM funnel_events WHERE CAST(json_extract(metadata_json,'$.trackingVersion') AS INTEGER)>=2`).first<{ started_at: string | null }>(),
+      db.prepare(`SELECT COUNT(*) AS total FROM purchases WHERE status='approved' AND julianday(created_at)>=julianday('now','-30 day')`).first<{ total: number }>(),
       getCatalog(db, true),
     ]);
     const completed = attempts?.total ?? 0;
     const funnel = Object.fromEntries(funnelRows.results.map(row => [String(row.event_type), Number(row.total || 0)]));
+    const detailedFunnel = Object.fromEntries(detailedFunnelRows.results.map(row => [String(row.event_type), Number(row.total || 0)]));
+    const questionFunnel = new Map<number, { questionIndex: number; questionId: string; viewed: number; answered: number; abandoned: number }>();
+    for (const row of questionFunnelRows.results) {
+      const questionIndex = Number(row.question_index || 0);
+      if (!questionIndex) continue;
+      const current = questionFunnel.get(questionIndex) || { questionIndex, questionId: String(row.question_id || ""), viewed: 0, answered: 0, abandoned: 0 };
+      if (row.event_type === "quiz_question_viewed") current.viewed = Number(row.total || 0);
+      if (row.event_type === "quiz_question_answered") current.answered = Number(row.total || 0);
+      if (row.event_type === "quiz_abandoned") current.abandoned = Number(row.total || 0);
+      questionFunnel.set(questionIndex, current);
+    }
     const started = Math.max(completed, funnel.quiz_started || 0);
     const purchaseTotal = purchases?.total ?? 0;
     const integrationValue = integration ? parseJson(integration.value_json) : { gateway: "", supportEmail: "", whatsapp: "" };
@@ -187,6 +203,22 @@ export async function GET(request: Request) {
       products: catalog,
       automations: automations.results,
       integration: integrationValue,
+      quizFunnel: {
+        periodDays: 30,
+        startedAt: detailedStart?.started_at || null,
+        stages: {
+          visitors: detailedFunnel.quiz_page_viewed || 0,
+          started: detailedFunnel.quiz_started || 0,
+          leadFormViewed: detailedFunnel.quiz_lead_form_viewed || 0,
+          leadFormStarted: detailedFunnel.quiz_lead_form_started || 0,
+          completed: detailedFunnel.lead_submitted || 0,
+          resultViewed: detailedFunnel.result_viewed || 0,
+          checkoutClicked: detailedFunnel.checkout_clicked || 0,
+          purchases: recentPurchases?.total || 0,
+        },
+        questions: [...questionFunnel.values()].sort((a, b) => a.questionIndex - b.questionIndex),
+        sources: sourceFunnelRows.results.map(row => ({ source: String(row.source || "Acesso direto"), total: Number(row.total || 0) })),
+      },
       readiness: {
         productionMode,
         emailConfigured: emailDeliveryConfigured() && Boolean(process.env.AUTH_SESSION_SECRET),
@@ -241,7 +273,7 @@ export async function POST(request: Request) {
   const now = new Date().toISOString();
 
   if (action === "funnel") {
-    const allowed = new Set(["quiz_started", "lead_submitted", "result_viewed", "checkout_clicked", "exit_offer_viewed", "exit_offer_clicked", "thank_you_viewed"]);
+    const allowed = new Set(["quiz_page_viewed", "quiz_started", "quiz_question_viewed", "quiz_question_answered", "quiz_lead_form_viewed", "quiz_lead_form_started", "quiz_abandoned", "lead_submitted", "result_viewed", "checkout_clicked", "exit_offer_viewed", "exit_offer_clicked", "thank_you_viewed"]);
     const eventType = sanitizeText(body.eventType, 60);
     if (!allowed.has(eventType)) return json({ error: "Evento inválido." }, 400);
     const email = sanitizeText(body.email, 160).toLowerCase();
@@ -252,7 +284,19 @@ export async function POST(request: Request) {
       /^\S+@\S+\.\S+$/.test(email) ? email : null,
       sanitizeText(body.productId, 60) || null,
       sanitizeText(body.profileKey, 60) || null,
-      JSON.stringify({ path: sanitizeText(body.path, 300), source: sanitizeText(body.source, 100) }),
+      JSON.stringify({
+        path: sanitizeText(body.path, 300),
+        source: sanitizeText(body.source, 300),
+        trackingVersion: Number(body.trackingVersion) >= 2 ? 2 : 1,
+        visitId: sanitizeText(body.visitId, 100),
+        questionId: sanitizeText(body.questionId, 50),
+        questionIndex: Math.min(100, Math.max(0, Number(body.questionIndex) || 0)),
+        totalQuestions: Math.min(100, Math.max(0, Number(body.totalQuestions) || 0)),
+        stepKind: sanitizeText(body.stepKind, 40),
+        utmSource: sanitizeText(body.utmSource, 100),
+        utmMedium: sanitizeText(body.utmMedium, 100),
+        utmCampaign: sanitizeText(body.utmCampaign, 160),
+      }),
       now,
     ).run();
     return json({ ok: true });

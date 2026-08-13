@@ -9,11 +9,13 @@ export function PasswordLoginForm({
   defaultPassword = "",
   endpoint = "/api/auth/login",
   allowRecovery = true,
+  redirectTo = "",
 }: {
   defaultEmail?: string;
   defaultPassword?: string;
   endpoint?: string;
   allowRecovery?: boolean;
+  redirectTo?: string;
 }) {
   const [email, setEmail] = useState(defaultEmail);
   const [password, setPassword] = useState(defaultPassword);
@@ -34,7 +36,7 @@ export function PasswordLoginForm({
       });
       const payload = await response.json().catch(() => ({})) as LoginPayload;
       if (!response.ok) throw new Error(payload.error || "Não foi possível entrar agora.");
-      window.location.assign(payload.redirect || "/app");
+      window.location.assign(redirectTo || payload.redirect || "/app");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Não foi possível entrar agora.");
     } finally {

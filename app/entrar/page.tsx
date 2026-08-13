@@ -4,10 +4,12 @@ import { SafeLink as Link } from "@/components/SafeLink";
 
 export const dynamic = "force-dynamic";
 
-export default async function LoginPage({ searchParams }: { searchParams: Promise<{ email?: string; erro?: string; perfil?: string }> }) {
+export default async function LoginPage({ searchParams }: { searchParams: Promise<{ email?: string; erro?: string; perfil?: string; retorno?: string }> }) {
   const user = await getSessionUser();
   const params = await searchParams;
   const requestedEmail = String(params.email || "").slice(0, 160);
+  const requestedReturn = String(params.retorno || "");
+  const returnTo = requestedReturn.startsWith("/") && !requestedReturn.startsWith("//") ? requestedReturn : "";
   const demo = process.env.DEMO_MODE === "true";
   const demoEmail = process.env.DEMO_EMAIL || "maria@demonstracao.com";
   const demoPassword = process.env.DEMO_PASSWORD || "Maria@Volta2026";
@@ -42,7 +44,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
           <Link className="demo-account-switch" href={adminView ? "/entrar" : "/entrar?perfil=admin"}>{adminView ? "Entrar como Maria" : "Acessar como administradora"}</Link>
         </> : <>
           <p>Entre com o mesmo e-mail usado na compra e com a senha criada no primeiro acesso.</p>
-          <PasswordLoginForm defaultEmail={requestedEmail}/>
+          <PasswordLoginForm defaultEmail={requestedEmail} redirectTo={returnTo}/>
           <div className="secure-note">✓ Sua senha não é enviada nem armazenada em texto legível<br/>✓ Cada cliente vê somente os produtos comprados</div>
         </>}
       </>}

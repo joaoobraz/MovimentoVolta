@@ -2,7 +2,7 @@
 /* eslint-disable react-hooks/set-state-in-effect, no-empty */
 
 import { SafeLink as Link } from "@/components/SafeLink";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { calculateResult, quizQuestions } from "@/lib/content";
 import { trackFunnel } from "@/lib/funnel-client";
 import { captureAttribution } from "@/lib/attribution";
@@ -25,19 +25,50 @@ export function QuizExperience() {
   const [lead, setLead] = useState<LeadForm>({ name:"", email:"", phone:"", privacy:false, marketing:false });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [restored, setRestored] = useState(false);
+  const completedRef = useRef(false);
+  const latestStepRef = useRef({ step: 0, questionId: quizQuestions[0].id, stepKind: "question" });
   const isLead = step === quizQuestions.length;
   const question = quizQuestions[Math.min(step, quizQuestions.length - 1)];
   const progress = Math.round((step / quizQuestions.length) * 100);
   const result = useMemo(()=>calculateResult(answers),[answers]);
 
   useEffect(()=>{
-    void trackFunnel("quiz_started", { source: document.referrer || "direct" });
+    const attribution = captureAttribution();
+    void trackFunnel("quiz_page_viewed", {
+      source: attribution.referrer || document.referrer || "direct",
+      utmSource: attribution.utm_source || "",
+      utmMedium: attribution.utm_medium || "",
+      utmCampaign: attribution.utm_campaign || "",
+    });
     const saved = localStorage.getItem("volta-quiz-draft");
     if (saved) try { const parsed=JSON.parse(saved); setAnswers(parsed.answers??{}); setStep(Math.min(parsed.step??0,quizQuestions.length)); } catch {}
+    setRestored(true);
   },[]);
   useEffect(()=>{ localStorage.setItem("volta-quiz-draft",JSON.stringify({answers,step})); },[answers,step]);
+  useEffect(()=>{
+    if (!restored) return;
+    if (isLead) {
+      latestStepRef.current = { step, questionId: "lead-form", stepKind: "lead_form" };
+      void trackFunnel("quiz_lead_form_viewed", { questionIndex: quizQuestions.length + 1, totalQuestions: quizQuestions.length, stepKind: "lead_form" });
+      return;
+    }
+    latestStepRef.current = { step, questionId: question.id, stepKind: "question" };
+    void trackFunnel("quiz_question_viewed", { questionId: question.id, questionIndex: step + 1, totalQuestions: quizQuestions.length, stepKind: "question" });
+  },[isLead, question.id, restored, step]);
+  useEffect(()=>{
+    const recordAbandonment = () => {
+      if (completedRef.current) return;
+      const current = latestStepRef.current;
+      void trackFunnel("quiz_abandoned", { questionId: current.questionId, questionIndex: current.step + 1, totalQuestions: quizQuestions.length, stepKind: current.stepKind });
+    };
+    window.addEventListener("pagehide", recordAbandonment);
+    return () => window.removeEventListener("pagehide", recordAbandonment);
+  },[]);
 
   function choose(value:string) {
+    void trackFunnel("quiz_started", { questionId: question.id, questionIndex: step + 1, totalQuestions: quizQuestions.length, stepKind: "question" });
+    void trackFunnel("quiz_question_answered", { questionId: question.id, questionIndex: step + 1, totalQuestions: quizQuestions.length, stepKind: "question" });
     const updated={...answers,[question.id]:value}; setAnswers(updated);
     window.setTimeout(()=>setStep(current=>Math.min(current+1,quizQuestions.length)),180);
   }
@@ -53,6 +84,7 @@ export function QuizExperience() {
       const response=await fetch("/api/data",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
       const data=await response.json() as {error?:string;leadId?:string}; if(!response.ok) throw new Error(data.error||"Não foi possível salvar seu diagnóstico.");
       const stored={...result,name:lead.name,email:lead.email,leadId:data.leadId,answers};
+      completedRef.current = true;
       void trackFunnel("lead_submitted", { leadId: data.leadId, profileKey: result.profile, source: attribution.utm_source || attribution.referrer || "direct" });
       localStorage.setItem("volta-result",JSON.stringify(stored)); localStorage.removeItem("volta-quiz-draft"); window.location.href="/resultado";
     } catch(e) { setError(e instanceof Error?e.message:"Tente novamente."); setSubmitting(false); }
@@ -68,7 +100,7 @@ export function QuizExperience() {
       <div className="quiz-foot"><button className="text-button" disabled={step===0} onClick={()=>setStep(Math.max(0,step-1))}>← Voltar</button><p>Não existem respostas certas ou erradas.</p></div>
     </section> : <section className="quiz-card lead-card">
       <span className="result-ready">✓</span><span className="quiz-kicker">Seu resultado está pronto</span><h1>Onde podemos enviar seu primeiro plano?</h1><p>Preencha os dados abaixo para acessar seu diagnóstico completo e receber seu plano inicial.</p>
-      <form onSubmit={submit} className="lead-form">
+      <form onSubmit={submit} className="lead-form" onFocus={()=>void trackFunnel("quiz_lead_form_started", { questionIndex: quizQuestions.length + 1, totalQuestions: quizQuestions.length, stepKind: "lead_form" })}>
         <label>Primeiro nome<input required minLength={2} autoComplete="given-name" value={lead.name} onChange={e=>setLead({...lead,name:e.target.value})} placeholder="Como você gosta de ser chamada?"/></label>
         <label>E-mail<input required type="email" autoComplete="email" value={lead.email} onChange={e=>setLead({...lead,email:e.target.value})} placeholder="voce@exemplo.com"/></label>
         <label>WhatsApp <small>Digite DDD e número, por exemplo: (11) 9 9999-9999</small><input required type="tel" inputMode="numeric" autoComplete="tel" maxLength={16} pattern="\([0-9]{2}\) [0-9] [0-9]{4}-[0-9]{4}" value={lead.phone} onChange={e=>setLead({...lead,phone:formatBrazilianPhone(e.target.value)})} placeholder="(11) 9 9999-9999" aria-describedby="whatsapp-hint"/><span id="whatsapp-hint" className="field-hint">A formatação aparece automaticamente.</span></label>
