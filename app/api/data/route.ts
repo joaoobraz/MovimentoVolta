@@ -153,24 +153,26 @@ export async function GET(request: Request) {
       return json({ user, access: access.results });
     }
 
-    const [leadCount, userCount, attempts, purchases, missionsDone, activeUsers, profileRows, leadsRows, reportsRows, automations, integration, funnelRows, detailedFunnelRows, questionFunnelRows, sourceFunnelRows, detailedStart, recentPurchases, catalog] = await Promise.all([
-      db.prepare(`SELECT COUNT(*) AS total FROM leads WHERE deleted_at IS NULL`).first<{ total: number }>(),
-      db.prepare(`SELECT COUNT(*) AS total FROM users WHERE deleted_at IS NULL`).first<{ total: number }>(),
-      db.prepare(`SELECT COUNT(*) AS total FROM quiz_attempts WHERE status='completed'`).first<{ total: number }>(),
-      db.prepare(`SELECT COUNT(*) AS total,COALESCE(SUM(amount_cents),0) AS revenue FROM purchases WHERE status='approved'`).first<{ total: number; revenue: number }>(),
-      db.prepare(`SELECT COUNT(*) AS total FROM user_missions WHERE status='completed'`).first<{ total: number }>(),
-      db.prepare(`SELECT COUNT(DISTINCT user_id) AS total FROM daily_checkins WHERE checkin_date>=date('now','-7 day')`).first<{ total: number }>(),
-      db.prepare(`SELECT profile_key,COUNT(*) AS total FROM quiz_attempts WHERE status='completed' GROUP BY profile_key ORDER BY total DESC`).all<JsonRecord>(),
+    const baselineSetting = await db.prepare(`SELECT value_json FROM system_settings WHERE key='analytics_baseline'`).first<{ value_json: string }>();
+    const baselineValue = baselineSetting ? sanitizeText(parseJson(baselineSetting.value_json).startedAt, 50) : "";
+    const analyticsBaseline = baselineValue && !Number.isNaN(Date.parse(baselineValue)) ? new Date(baselineValue).toISOString() : "1970-01-01T00:00:00.000Z";
+    const [leadCount, userCount, attempts, purchases, missionsDone, activeUsers, profileRows, leadsRows, reportsRows, automations, integration, funnelRows, detailedFunnelRows, questionFunnelRows, sourceFunnelRows, recentPurchases, catalog] = await Promise.all([
+      db.prepare(`SELECT COUNT(*) AS total FROM leads WHERE deleted_at IS NULL AND julianday(created_at)>=julianday(?)`).bind(analyticsBaseline).first<{ total: number }>(),
+      db.prepare(`SELECT COUNT(*) AS total FROM users WHERE deleted_at IS NULL AND julianday(created_at)>=julianday(?)`).bind(analyticsBaseline).first<{ total: number }>(),
+      db.prepare(`SELECT COUNT(*) AS total FROM quiz_attempts WHERE status='completed' AND julianday(created_at)>=julianday(?)`).bind(analyticsBaseline).first<{ total: number }>(),
+      db.prepare(`SELECT COUNT(*) AS total,COALESCE(SUM(amount_cents),0) AS revenue FROM purchases WHERE status='approved' AND julianday(created_at)>=julianday(?)`).bind(analyticsBaseline).first<{ total: number; revenue: number }>(),
+      db.prepare(`SELECT COUNT(*) AS total FROM user_missions WHERE status='completed' AND julianday(created_at)>=julianday(?)`).bind(analyticsBaseline).first<{ total: number }>(),
+      db.prepare(`SELECT COUNT(DISTINCT user_id) AS total FROM daily_checkins WHERE checkin_date>=date('now','-7 day') AND julianday(created_at)>=julianday(?)`).bind(analyticsBaseline).first<{ total: number }>(),
+      db.prepare(`SELECT profile_key,COUNT(*) AS total FROM quiz_attempts WHERE status='completed' AND julianday(created_at)>=julianday(?) GROUP BY profile_key ORDER BY total DESC`).bind(analyticsBaseline).all<JsonRecord>(),
       db.prepare(`SELECT id,name,email,phone,profile_id,score,marketing_consent,status,created_at FROM leads WHERE deleted_at IS NULL ORDER BY created_at DESC LIMIT 100`).all<JsonRecord>(),
       db.prepare(`SELECT r.id,r.reason,r.status,r.created_at,p.body FROM community_reports r LEFT JOIN community_posts p ON p.id=r.post_id ORDER BY r.created_at DESC`).all<JsonRecord>(),
       db.prepare(`SELECT kind,enabled,requires_consent,template_json FROM automation_settings ORDER BY kind`).all<JsonRecord>(),
       db.prepare(`SELECT value_json FROM system_settings WHERE key='integrations'`).first<{ value_json: string }>(),
-      db.prepare(`SELECT event_type,COUNT(*) AS total FROM funnel_events GROUP BY event_type`).all<JsonRecord>(),
-      db.prepare(`SELECT event_type,COUNT(DISTINCT json_extract(metadata_json,'$.visitId')) AS total FROM funnel_events WHERE CAST(json_extract(metadata_json,'$.trackingVersion') AS INTEGER)>=2 AND julianday(created_at)>=julianday('now','-30 day') GROUP BY event_type`).all<JsonRecord>(),
-      db.prepare(`SELECT event_type,CAST(json_extract(metadata_json,'$.questionIndex') AS INTEGER) AS question_index,json_extract(metadata_json,'$.questionId') AS question_id,COUNT(DISTINCT json_extract(metadata_json,'$.visitId')) AS total FROM funnel_events WHERE event_type IN ('quiz_question_viewed','quiz_question_answered','quiz_abandoned') AND CAST(json_extract(metadata_json,'$.trackingVersion') AS INTEGER)>=2 AND julianday(created_at)>=julianday('now','-30 day') GROUP BY event_type,question_index,question_id ORDER BY question_index`).all<JsonRecord>(),
-      db.prepare(`SELECT COALESCE(NULLIF(json_extract(metadata_json,'$.utmSource'),''),NULLIF(json_extract(metadata_json,'$.source'),''),'Acesso direto') AS source,COUNT(DISTINCT json_extract(metadata_json,'$.visitId')) AS total FROM funnel_events WHERE event_type='quiz_page_viewed' AND CAST(json_extract(metadata_json,'$.trackingVersion') AS INTEGER)>=2 AND julianday(created_at)>=julianday('now','-30 day') GROUP BY source ORDER BY total DESC LIMIT 8`).all<JsonRecord>(),
-      db.prepare(`SELECT MIN(created_at) AS started_at FROM funnel_events WHERE CAST(json_extract(metadata_json,'$.trackingVersion') AS INTEGER)>=2`).first<{ started_at: string | null }>(),
-      db.prepare(`SELECT COUNT(*) AS total FROM purchases WHERE status='approved' AND julianday(created_at)>=julianday('now','-30 day')`).first<{ total: number }>(),
+      db.prepare(`SELECT event_type,COUNT(*) AS total FROM funnel_events WHERE julianday(created_at)>=julianday(?) GROUP BY event_type`).bind(analyticsBaseline).all<JsonRecord>(),
+      db.prepare(`SELECT event_type,COUNT(DISTINCT json_extract(metadata_json,'$.visitId')) AS total FROM funnel_events WHERE CAST(json_extract(metadata_json,'$.trackingVersion') AS INTEGER)>=2 AND julianday(created_at)>=julianday(?) GROUP BY event_type`).bind(analyticsBaseline).all<JsonRecord>(),
+      db.prepare(`SELECT event_type,CAST(json_extract(metadata_json,'$.questionIndex') AS INTEGER) AS question_index,json_extract(metadata_json,'$.questionId') AS question_id,COUNT(DISTINCT json_extract(metadata_json,'$.visitId')) AS total FROM funnel_events WHERE event_type IN ('quiz_question_viewed','quiz_question_answered','quiz_abandoned') AND CAST(json_extract(metadata_json,'$.trackingVersion') AS INTEGER)>=2 AND julianday(created_at)>=julianday(?) GROUP BY event_type,question_index,question_id ORDER BY question_index`).bind(analyticsBaseline).all<JsonRecord>(),
+      db.prepare(`SELECT COALESCE(NULLIF(json_extract(metadata_json,'$.utmSource'),''),NULLIF(json_extract(metadata_json,'$.source'),''),'Acesso direto') AS source,COUNT(DISTINCT json_extract(metadata_json,'$.visitId')) AS total FROM funnel_events WHERE event_type='quiz_page_viewed' AND CAST(json_extract(metadata_json,'$.trackingVersion') AS INTEGER)>=2 AND julianday(created_at)>=julianday(?) GROUP BY source ORDER BY total DESC LIMIT 8`).bind(analyticsBaseline).all<JsonRecord>(),
+      db.prepare(`SELECT COUNT(*) AS total FROM purchases WHERE status='approved' AND julianday(created_at)>=julianday(?)`).bind(analyticsBaseline).first<{ total: number }>(),
       getCatalog(db, true),
     ]);
     const completed = attempts?.total ?? 0;
@@ -205,7 +207,7 @@ export async function GET(request: Request) {
       integration: integrationValue,
       quizFunnel: {
         periodDays: 30,
-        startedAt: detailedStart?.started_at || null,
+        startedAt: analyticsBaseline,
         stages: {
           visitors: detailedFunnel.quiz_page_viewed || 0,
           started: detailedFunnel.quiz_started || 0,
