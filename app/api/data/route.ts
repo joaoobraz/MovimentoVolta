@@ -156,7 +156,7 @@ export async function GET(request: Request) {
     const baselineSetting = await db.prepare(`SELECT value_json FROM system_settings WHERE key='analytics_baseline'`).first<{ value_json: string }>();
     const baselineValue = baselineSetting ? sanitizeText(parseJson(baselineSetting.value_json).startedAt, 50) : "";
     const analyticsBaseline = baselineValue && !Number.isNaN(Date.parse(baselineValue)) ? new Date(baselineValue).toISOString() : "1970-01-01T00:00:00.000Z";
-    const [leadCount, userCount, attempts, purchases, missionsDone, activeUsers, profileRows, leadsRows, reportsRows, automations, integration, funnelRows, detailedFunnelRows, questionFunnelRows, sourceFunnelRows, recentPurchases, catalog] = await Promise.all([
+    const [leadCount, userCount, attempts, purchases, missionsDone, activeUsers, profileRows, leadsRows, reportsRows, automations, integration, funnelRows, detailedFunnelRows, questionFunnelRows, lastReachedRows, sourceFunnelRows, recentPurchases, catalog] = await Promise.all([
       db.prepare(`SELECT COUNT(*) AS total FROM leads WHERE deleted_at IS NULL AND julianday(created_at)>=julianday(?)`).bind(analyticsBaseline).first<{ total: number }>(),
       db.prepare(`SELECT COUNT(*) AS total FROM users WHERE deleted_at IS NULL AND julianday(created_at)>=julianday(?)`).bind(analyticsBaseline).first<{ total: number }>(),
       db.prepare(`SELECT COUNT(*) AS total FROM quiz_attempts WHERE status='completed' AND julianday(created_at)>=julianday(?)`).bind(analyticsBaseline).first<{ total: number }>(),
@@ -171,6 +171,7 @@ export async function GET(request: Request) {
       db.prepare(`SELECT event_type,COUNT(*) AS total FROM funnel_events WHERE julianday(created_at)>=julianday(?) GROUP BY event_type`).bind(analyticsBaseline).all<JsonRecord>(),
       db.prepare(`SELECT event_type,COUNT(DISTINCT json_extract(metadata_json,'$.visitId')) AS total FROM funnel_events WHERE CAST(json_extract(metadata_json,'$.trackingVersion') AS INTEGER)>=2 AND julianday(created_at)>=julianday(?) GROUP BY event_type`).bind(analyticsBaseline).all<JsonRecord>(),
       db.prepare(`SELECT event_type,CAST(json_extract(metadata_json,'$.questionIndex') AS INTEGER) AS question_index,json_extract(metadata_json,'$.questionId') AS question_id,COUNT(DISTINCT json_extract(metadata_json,'$.visitId')) AS total FROM funnel_events WHERE event_type IN ('quiz_question_viewed','quiz_question_answered','quiz_abandoned') AND CAST(json_extract(metadata_json,'$.trackingVersion') AS INTEGER)>=2 AND julianday(created_at)>=julianday(?) GROUP BY event_type,question_index,question_id ORDER BY question_index`).bind(analyticsBaseline).all<JsonRecord>(),
+      db.prepare(`SELECT last_question AS question_index,COUNT(*) AS total FROM (SELECT json_extract(metadata_json,'$.visitId') AS visit_id,MAX(CAST(json_extract(metadata_json,'$.questionIndex') AS INTEGER)) AS last_question FROM funnel_events WHERE event_type='quiz_question_viewed' AND CAST(json_extract(metadata_json,'$.trackingVersion') AS INTEGER)>=2 AND json_extract(metadata_json,'$.visitId') IS NOT NULL AND julianday(created_at)>=julianday(?) GROUP BY visit_id) WHERE last_question BETWEEN 1 AND 24 GROUP BY last_question ORDER BY last_question`).bind(analyticsBaseline).all<JsonRecord>(),
       db.prepare(`SELECT COALESCE(NULLIF(json_extract(metadata_json,'$.utmSource'),''),NULLIF(json_extract(metadata_json,'$.source'),''),'Acesso direto') AS source,COUNT(DISTINCT json_extract(metadata_json,'$.visitId')) AS total FROM funnel_events WHERE event_type='quiz_page_viewed' AND CAST(json_extract(metadata_json,'$.trackingVersion') AS INTEGER)>=2 AND julianday(created_at)>=julianday(?) GROUP BY source ORDER BY total DESC LIMIT 8`).bind(analyticsBaseline).all<JsonRecord>(),
       db.prepare(`SELECT COUNT(*) AS total FROM purchases WHERE status='approved' AND julianday(created_at)>=julianday(?)`).bind(analyticsBaseline).first<{ total: number }>(),
       getCatalog(db, true),
@@ -219,6 +220,7 @@ export async function GET(request: Request) {
           purchases: recentPurchases?.total || 0,
         },
         questions: [...questionFunnel.values()].sort((a, b) => a.questionIndex - b.questionIndex),
+        lastReached: lastReachedRows.results.map(row => ({ questionIndex: Number(row.question_index || 0), total: Number(row.total || 0) })),
         sources: sourceFunnelRows.results.map(row => ({ source: String(row.source || "Acesso direto"), total: Number(row.total || 0) })),
       },
       readiness: {
