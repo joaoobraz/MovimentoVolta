@@ -31,7 +31,6 @@ export function QuizExperience() {
   const latestStepRef = useRef({ step: -1, questionId: "intro", stepKind: "intro" });
   const isLead = started && step === quizQuestions.length;
   const question = quizQuestions[Math.min(step, quizQuestions.length - 1)];
-  const progress = isLead ? 100 : Math.round(((step + 1) / quizQuestions.length) * 100);
   const progressLabel = step < 6
     ? "Começando seu diagnóstico"
     : step < 12
@@ -116,7 +115,7 @@ export function QuizExperience() {
       <button className="button quiz-start-button" onClick={startQuiz}>Quero entender meu momento</button>
       <small>Sem respostas certas ou erradas. Seus dados ficam protegidos.</small>
     </section> : <>
-    <div className="quiz-progress-wrap"><div className="quiz-progress-copy"><span>{isLead ? "Seu resultado está pronto" : progressLabel}</span><strong>{progress}%</strong></div><div className="progress-bar"><i style={{width:`${progress}%`}}/></div></div>
+    <div className="quiz-moment" aria-live="polite"><span>{isLead ? "Seu resultado está pronto" : progressLabel}</span></div>
     {!isLead ? <section className="quiz-card" key={question.id}>
       <span className="quiz-kicker">Responda pensando na sua rotina das últimas semanas</span>
       <h1>{question.text}</h1>
