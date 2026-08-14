@@ -8,6 +8,7 @@ export type FunnelEvent =
   | "quiz_abandoned"
   | "lead_submitted"
   | "result_viewed"
+  | "offer_viewed"
   | "checkout_clicked"
   | "exit_offer_viewed"
   | "exit_offer_clicked"

@@ -65,6 +65,35 @@ function parseJson(value: string): JsonRecord {
   try { return JSON.parse(value) as JsonRecord; } catch { return {}; }
 }
 
+function adminDateRange(url: URL, analyticsBaseline: string) {
+  const datePattern = /^\d{4}-\d{2}-\d{2}$/;
+  const requestedFrom = sanitizeText(url.searchParams.get("from"), 10);
+  const requestedTo = sanitizeText(url.searchParams.get("to"), 10);
+  const fromDate = datePattern.test(requestedFrom) ? new Date(`${requestedFrom}T00:00:00-03:00`) : new Date(analyticsBaseline);
+  const toDate = datePattern.test(requestedTo) ? new Date(new Date(`${requestedTo}T00:00:00-03:00`).getTime() + 86_400_000) : new Date(Date.now() + 86_400_000);
+  const baselineDate = new Date(analyticsBaseline);
+  const effectiveFrom = new Date(Math.max(fromDate.getTime(), baselineDate.getTime()));
+  const effectiveTo = Number.isNaN(toDate.getTime()) ? new Date(Date.now() + 86_400_000) : toDate;
+  return {
+    from: effectiveFrom.toISOString(),
+    to: effectiveTo.toISOString(),
+    requestedFrom: datePattern.test(requestedFrom) ? requestedFrom : effectiveFrom.toISOString().slice(0, 10),
+    requestedTo: datePattern.test(requestedTo) ? requestedTo : new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" }),
+  };
+}
+
+function normalizedTrafficSource(value: unknown) {
+  const original = sanitizeText(value, 300);
+  const source = original.toLowerCase();
+  if (!source || source === "direct" || source === "acesso direto") return "Acesso direto";
+  if (source === "meta") return "Meta (Facebook/Instagram)";
+  if (source.includes("instagram") || source === "ig") return "Instagram";
+  if (source.includes("facebook") || source.includes("l.facebook") || source === "fb") return "Facebook";
+  if (source.includes("google")) return "Google";
+  if (source === "th" || source === "an" || source.length < 3) return "Não identificado";
+  try { return new URL(original).hostname.replace(/^www\./, ""); } catch { return original.slice(0, 42); }
+}
+
 function catalogRow(row: JsonRecord) {
   return {
     id: String(row.id),
@@ -156,28 +185,26 @@ export async function GET(request: Request) {
     const baselineSetting = await db.prepare(`SELECT value_json FROM system_settings WHERE key='analytics_baseline'`).first<{ value_json: string }>();
     const baselineValue = baselineSetting ? sanitizeText(parseJson(baselineSetting.value_json).startedAt, 50) : "";
     const analyticsBaseline = baselineValue && !Number.isNaN(Date.parse(baselineValue)) ? new Date(baselineValue).toISOString() : "1970-01-01T00:00:00.000Z";
-    const [leadCount, userCount, attempts, purchases, missionsDone, activeUsers, profileRows, leadsRows, reportsRows, automations, integration, funnelRows, detailedFunnelRows, questionFunnelRows, lastReachedRows, sourceFunnelRows, recentPurchases, catalog] = await Promise.all([
-      db.prepare(`SELECT COUNT(*) AS total FROM leads WHERE deleted_at IS NULL AND julianday(created_at)>=julianday(?)`).bind(analyticsBaseline).first<{ total: number }>(),
-      db.prepare(`SELECT COUNT(*) AS total FROM users WHERE deleted_at IS NULL AND julianday(created_at)>=julianday(?)`).bind(analyticsBaseline).first<{ total: number }>(),
-      db.prepare(`SELECT COUNT(*) AS total FROM quiz_attempts WHERE status='completed' AND julianday(created_at)>=julianday(?)`).bind(analyticsBaseline).first<{ total: number }>(),
-      db.prepare(`SELECT COUNT(*) AS total,COALESCE(SUM(amount_cents),0) AS revenue FROM purchases WHERE status='approved' AND julianday(created_at)>=julianday(?)`).bind(analyticsBaseline).first<{ total: number; revenue: number }>(),
-      db.prepare(`SELECT COUNT(*) AS total FROM user_missions WHERE status='completed' AND julianday(created_at)>=julianday(?)`).bind(analyticsBaseline).first<{ total: number }>(),
-      db.prepare(`SELECT COUNT(DISTINCT user_id) AS total FROM daily_checkins WHERE checkin_date>=date('now','-7 day') AND julianday(created_at)>=julianday(?)`).bind(analyticsBaseline).first<{ total: number }>(),
-      db.prepare(`SELECT profile_key,COUNT(*) AS total FROM quiz_attempts WHERE status='completed' AND julianday(created_at)>=julianday(?) GROUP BY profile_key ORDER BY total DESC`).bind(analyticsBaseline).all<JsonRecord>(),
+    const range = adminDateRange(url, analyticsBaseline);
+    const [leadCount, userCount, attempts, purchases, missionsDone, activeUsers, profileRows, leadsRows, reportsRows, automations, integration, detailedFunnelRows, questionFunnelRows, lastReachedRows, sourceFunnelRows, catalog] = await Promise.all([
+      db.prepare(`SELECT COUNT(*) AS total FROM leads WHERE deleted_at IS NULL AND julianday(created_at)>=julianday(?) AND julianday(created_at)<julianday(?)`).bind(range.from, range.to).first<{ total: number }>(),
+      db.prepare(`SELECT COUNT(*) AS total FROM users WHERE deleted_at IS NULL AND julianday(created_at)>=julianday(?) AND julianday(created_at)<julianday(?)`).bind(range.from, range.to).first<{ total: number }>(),
+      db.prepare(`SELECT COUNT(*) AS total FROM quiz_attempts WHERE status='completed' AND julianday(created_at)>=julianday(?) AND julianday(created_at)<julianday(?)`).bind(range.from, range.to).first<{ total: number }>(),
+      db.prepare(`SELECT COUNT(*) AS total,COALESCE(SUM(amount_cents),0) AS revenue FROM purchases WHERE status='approved' AND julianday(created_at)>=julianday(?) AND julianday(created_at)<julianday(?)`).bind(range.from, range.to).first<{ total: number; revenue: number }>(),
+      db.prepare(`SELECT COUNT(*) AS total FROM user_missions WHERE status='completed' AND julianday(created_at)>=julianday(?) AND julianday(created_at)<julianday(?)`).bind(range.from, range.to).first<{ total: number }>(),
+      db.prepare(`SELECT COUNT(DISTINCT user_id) AS total FROM daily_checkins WHERE julianday(created_at)>=julianday(?) AND julianday(created_at)<julianday(?)`).bind(range.from, range.to).first<{ total: number }>(),
+      db.prepare(`SELECT profile_key,COUNT(*) AS total FROM quiz_attempts WHERE status='completed' AND julianday(created_at)>=julianday(?) AND julianday(created_at)<julianday(?) GROUP BY profile_key ORDER BY total DESC`).bind(range.from, range.to).all<JsonRecord>(),
       db.prepare(`SELECT id,name,email,phone,profile_id,score,marketing_consent,status,created_at FROM leads WHERE deleted_at IS NULL ORDER BY created_at DESC LIMIT 100`).all<JsonRecord>(),
       db.prepare(`SELECT r.id,r.reason,r.status,r.created_at,p.body FROM community_reports r LEFT JOIN community_posts p ON p.id=r.post_id ORDER BY r.created_at DESC`).all<JsonRecord>(),
       db.prepare(`SELECT kind,enabled,requires_consent,template_json FROM automation_settings ORDER BY kind`).all<JsonRecord>(),
       db.prepare(`SELECT value_json FROM system_settings WHERE key='integrations'`).first<{ value_json: string }>(),
-      db.prepare(`SELECT event_type,COUNT(*) AS total FROM funnel_events WHERE julianday(created_at)>=julianday(?) GROUP BY event_type`).bind(analyticsBaseline).all<JsonRecord>(),
-      db.prepare(`SELECT event_type,COUNT(DISTINCT json_extract(metadata_json,'$.visitId')) AS total FROM funnel_events WHERE CAST(json_extract(metadata_json,'$.trackingVersion') AS INTEGER)>=2 AND julianday(created_at)>=julianday(?) GROUP BY event_type`).bind(analyticsBaseline).all<JsonRecord>(),
-      db.prepare(`SELECT event_type,CAST(json_extract(metadata_json,'$.questionIndex') AS INTEGER) AS question_index,json_extract(metadata_json,'$.questionId') AS question_id,COUNT(DISTINCT json_extract(metadata_json,'$.visitId')) AS total FROM funnel_events WHERE event_type IN ('quiz_question_viewed','quiz_question_answered','quiz_abandoned') AND CAST(json_extract(metadata_json,'$.trackingVersion') AS INTEGER)>=2 AND julianday(created_at)>=julianday(?) GROUP BY event_type,question_index,question_id ORDER BY question_index`).bind(analyticsBaseline).all<JsonRecord>(),
-      db.prepare(`SELECT last_question AS question_index,COUNT(*) AS total FROM (SELECT json_extract(metadata_json,'$.visitId') AS visit_id,MAX(CAST(json_extract(metadata_json,'$.questionIndex') AS INTEGER)) AS last_question FROM funnel_events WHERE event_type='quiz_question_viewed' AND CAST(json_extract(metadata_json,'$.trackingVersion') AS INTEGER)>=2 AND json_extract(metadata_json,'$.visitId') IS NOT NULL AND julianday(created_at)>=julianday(?) GROUP BY visit_id) WHERE last_question BETWEEN 1 AND 24 GROUP BY last_question ORDER BY last_question`).bind(analyticsBaseline).all<JsonRecord>(),
-      db.prepare(`SELECT COALESCE(NULLIF(json_extract(metadata_json,'$.utmSource'),''),NULLIF(json_extract(metadata_json,'$.source'),''),'Acesso direto') AS source,COUNT(DISTINCT json_extract(metadata_json,'$.visitId')) AS total FROM funnel_events WHERE event_type='quiz_page_viewed' AND CAST(json_extract(metadata_json,'$.trackingVersion') AS INTEGER)>=2 AND julianday(created_at)>=julianday(?) GROUP BY source ORDER BY total DESC LIMIT 8`).bind(analyticsBaseline).all<JsonRecord>(),
-      db.prepare(`SELECT COUNT(*) AS total FROM purchases WHERE status='approved' AND julianday(created_at)>=julianday(?)`).bind(analyticsBaseline).first<{ total: number }>(),
+      db.prepare(`SELECT event_type,COUNT(DISTINCT json_extract(metadata_json,'$.visitId')) AS total FROM funnel_events WHERE CAST(json_extract(metadata_json,'$.trackingVersion') AS INTEGER)>=2 AND julianday(created_at)>=julianday(?) AND julianday(created_at)<julianday(?) GROUP BY event_type`).bind(range.from, range.to).all<JsonRecord>(),
+      db.prepare(`SELECT event_type,CAST(json_extract(metadata_json,'$.questionIndex') AS INTEGER) AS question_index,json_extract(metadata_json,'$.questionId') AS question_id,COUNT(DISTINCT json_extract(metadata_json,'$.visitId')) AS total FROM funnel_events WHERE event_type IN ('quiz_question_viewed','quiz_question_answered','quiz_abandoned') AND CAST(json_extract(metadata_json,'$.trackingVersion') AS INTEGER)>=2 AND julianday(created_at)>=julianday(?) AND julianday(created_at)<julianday(?) GROUP BY event_type,question_index,question_id ORDER BY question_index`).bind(range.from, range.to).all<JsonRecord>(),
+      db.prepare(`SELECT last_question AS question_index,COUNT(*) AS total FROM (SELECT json_extract(metadata_json,'$.visitId') AS visit_id,MAX(CAST(json_extract(metadata_json,'$.questionIndex') AS INTEGER)) AS last_question FROM funnel_events WHERE event_type='quiz_question_viewed' AND CAST(json_extract(metadata_json,'$.trackingVersion') AS INTEGER)>=2 AND json_extract(metadata_json,'$.visitId') IS NOT NULL AND julianday(created_at)>=julianday(?) AND julianday(created_at)<julianday(?) GROUP BY visit_id) WHERE last_question BETWEEN 1 AND 24 GROUP BY last_question ORDER BY last_question`).bind(range.from, range.to).all<JsonRecord>(),
+      db.prepare(`SELECT COALESCE(NULLIF(json_extract(metadata_json,'$.utmSource'),''),NULLIF(json_extract(metadata_json,'$.source'),''),'Acesso direto') AS source,COUNT(DISTINCT json_extract(metadata_json,'$.visitId')) AS total FROM funnel_events WHERE event_type='quiz_page_viewed' AND CAST(json_extract(metadata_json,'$.trackingVersion') AS INTEGER)>=2 AND julianday(created_at)>=julianday(?) AND julianday(created_at)<julianday(?) GROUP BY source`).bind(range.from, range.to).all<JsonRecord>(),
       getCatalog(db, true),
     ]);
     const completed = attempts?.total ?? 0;
-    const funnel = Object.fromEntries(funnelRows.results.map(row => [String(row.event_type), Number(row.total || 0)]));
     const detailedFunnel = Object.fromEntries(detailedFunnelRows.results.map(row => [String(row.event_type), Number(row.total || 0)]));
     const questionFunnel = new Map<number, { questionIndex: number; questionId: string; viewed: number; answered: number; abandoned: number }>();
     for (const row of questionFunnelRows.results) {
@@ -189,7 +216,12 @@ export async function GET(request: Request) {
       if (row.event_type === "quiz_abandoned") current.abandoned = Number(row.total || 0);
       questionFunnel.set(questionIndex, current);
     }
-    const started = Math.max(completed, funnel.quiz_started || 0);
+    const sourceTotals = new Map<string, number>();
+    for (const row of sourceFunnelRows.results) {
+      const source = normalizedTrafficSource(row.source);
+      sourceTotals.set(source, (sourceTotals.get(source) || 0) + Number(row.total || 0));
+    }
+    const started = Math.max(completed, detailedFunnel.quiz_started || 0);
     const purchaseTotal = purchases?.total ?? 0;
     const integrationValue = integration ? parseJson(integration.value_json) : { gateway: "", supportEmail: "", whatsapp: "" };
     const catalogConfigured = catalog.filter(product => product.status === "active").every(product => product.checkoutUrl && product.externalId);
@@ -199,7 +231,7 @@ export async function GET(request: Request) {
     const productionMode = process.env.DEMO_MODE !== "true";
     return json({
       viewer: admin,
-      metrics: { leads: leadCount?.total ?? 0, users: userCount?.total ?? 0, quizStarted: started, quizCompleted: completed, resultViewed: funnel.result_viewed || 0, checkoutClicked: funnel.checkout_clicked || 0, purchases: purchaseTotal, completionRate: started ? Math.round(completed / started * 100) : 0, salesConversion: completed ? Math.round(purchaseTotal / completed * 100) : 0, revenue: (purchases?.revenue ?? 0) / 100, ticket: purchaseTotal ? (purchases?.revenue ?? 0) / purchaseTotal / 100 : 0, missions: missionsDone?.total ?? 0, activeUsers: activeUsers?.total ?? 0 },
+      metrics: { leads: leadCount?.total ?? 0, users: userCount?.total ?? 0, quizStarted: started, quizCompleted: completed, resultViewed: detailedFunnel.result_viewed || 0, checkoutClicked: detailedFunnel.checkout_clicked || 0, purchases: purchaseTotal, completionRate: started ? Math.round(completed / started * 100) : 0, salesConversion: completed ? Math.round(purchaseTotal / completed * 100) : 0, revenue: (purchases?.revenue ?? 0) / 100, ticket: purchaseTotal ? (purchases?.revenue ?? 0) / purchaseTotal / 100 : 0, missions: missionsDone?.total ?? 0, activeUsers: activeUsers?.total ?? 0 },
       profiles: profileRows.results,
       leads: leadsRows.results,
       reports: reportsRows.results,
@@ -207,8 +239,9 @@ export async function GET(request: Request) {
       automations: automations.results,
       integration: integrationValue,
       quizFunnel: {
-        periodDays: 30,
-        startedAt: analyticsBaseline,
+        periodDays: Math.max(1, Math.ceil((new Date(range.to).getTime() - new Date(range.from).getTime()) / 86_400_000)),
+        startedAt: range.from,
+        range: { from: range.requestedFrom, to: range.requestedTo, effectiveFrom: range.from },
         stages: {
           visitors: detailedFunnel.quiz_page_viewed || 0,
           started: detailedFunnel.quiz_started || 0,
@@ -216,12 +249,13 @@ export async function GET(request: Request) {
           leadFormStarted: detailedFunnel.quiz_lead_form_started || 0,
           completed: detailedFunnel.lead_submitted || 0,
           resultViewed: detailedFunnel.result_viewed || 0,
+          offerViewed: detailedFunnel.offer_viewed || 0,
           checkoutClicked: detailedFunnel.checkout_clicked || 0,
-          purchases: recentPurchases?.total || 0,
+          purchases: purchaseTotal,
         },
         questions: [...questionFunnel.values()].sort((a, b) => a.questionIndex - b.questionIndex),
         lastReached: lastReachedRows.results.map(row => ({ questionIndex: Number(row.question_index || 0), total: Number(row.total || 0) })),
-        sources: sourceFunnelRows.results.map(row => ({ source: String(row.source || "Acesso direto"), total: Number(row.total || 0) })),
+        sources: [...sourceTotals.entries()].map(([source, total]) => ({ source, total })).sort((a, b) => b.total - a.total).slice(0, 8),
       },
       readiness: {
         productionMode,
@@ -277,7 +311,7 @@ export async function POST(request: Request) {
   const now = new Date().toISOString();
 
   if (action === "funnel") {
-    const allowed = new Set(["quiz_page_viewed", "quiz_started", "quiz_question_viewed", "quiz_question_answered", "quiz_lead_form_viewed", "quiz_lead_form_started", "quiz_abandoned", "lead_submitted", "result_viewed", "checkout_clicked", "exit_offer_viewed", "exit_offer_clicked", "thank_you_viewed"]);
+    const allowed = new Set(["quiz_page_viewed", "quiz_started", "quiz_question_viewed", "quiz_question_answered", "quiz_lead_form_viewed", "quiz_lead_form_started", "quiz_abandoned", "lead_submitted", "result_viewed", "offer_viewed", "checkout_clicked", "exit_offer_viewed", "exit_offer_clicked", "thank_you_viewed"]);
     const eventType = sanitizeText(body.eventType, 60);
     if (!allowed.has(eventType)) return json({ error: "Evento inválido." }, 400);
     const email = sanitizeText(body.email, 160).toLowerCase();

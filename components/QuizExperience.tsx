@@ -20,6 +20,7 @@ function formatBrazilianPhone(value:string) {
 }
 
 export function QuizExperience() {
+  const [started, setStarted] = useState(false);
   const [step, setStep] = useState(0);
   const [answers, setAnswers] = useState<Record<string,string>>({});
   const [lead, setLead] = useState<LeadForm>({ name:"", email:"", phone:"", privacy:false, marketing:false });
@@ -27,8 +28,8 @@ export function QuizExperience() {
   const [error, setError] = useState("");
   const [restored, setRestored] = useState(false);
   const completedRef = useRef(false);
-  const latestStepRef = useRef({ step: 0, questionId: quizQuestions[0].id, stepKind: "question" });
-  const isLead = step === quizQuestions.length;
+  const latestStepRef = useRef({ step: -1, questionId: "intro", stepKind: "intro" });
+  const isLead = started && step === quizQuestions.length;
   const question = quizQuestions[Math.min(step, quizQuestions.length - 1)];
   const progress = Math.round((step / quizQuestions.length) * 100);
   const result = useMemo(()=>calculateResult(answers),[answers]);
@@ -42,12 +43,16 @@ export function QuizExperience() {
       utmCampaign: attribution.utm_campaign || "",
     });
     const saved = localStorage.getItem("volta-quiz-draft");
-    if (saved) try { const parsed=JSON.parse(saved); setAnswers(parsed.answers??{}); setStep(Math.min(parsed.step??0,quizQuestions.length)); } catch {}
+    if (saved) try { const parsed=JSON.parse(saved); const savedAnswers=parsed.answers??{}; const savedStep=Math.min(parsed.step??0,quizQuestions.length); setAnswers(savedAnswers); setStep(savedStep); setStarted(savedStep>0||Object.keys(savedAnswers).length>0); } catch {}
     setRestored(true);
   },[]);
   useEffect(()=>{ localStorage.setItem("volta-quiz-draft",JSON.stringify({answers,step})); },[answers,step]);
   useEffect(()=>{
     if (!restored) return;
+    if (!started) {
+      latestStepRef.current = { step: -1, questionId: "intro", stepKind: "intro" };
+      return;
+    }
     if (isLead) {
       latestStepRef.current = { step, questionId: "lead-form", stepKind: "lead_form" };
       void trackFunnel("quiz_lead_form_viewed", { questionIndex: quizQuestions.length + 1, totalQuestions: quizQuestions.length, stepKind: "lead_form" });
@@ -55,7 +60,7 @@ export function QuizExperience() {
     }
     latestStepRef.current = { step, questionId: question.id, stepKind: "question" };
     void trackFunnel("quiz_question_viewed", { questionId: question.id, questionIndex: step + 1, totalQuestions: quizQuestions.length, stepKind: "question" });
-  },[isLead, question.id, restored, step]);
+  },[isLead, question.id, restored, started, step]);
   useEffect(()=>{
     const recordAbandonment = () => {
       if (completedRef.current) return;
@@ -66,8 +71,12 @@ export function QuizExperience() {
     return () => window.removeEventListener("pagehide", recordAbandonment);
   },[]);
 
+  function startQuiz() {
+    setStarted(true);
+    void trackFunnel("quiz_started", { questionId: "intro", questionIndex: 1, totalQuestions: quizQuestions.length, stepKind: "intro" });
+  }
+
   function choose(value:string) {
-    void trackFunnel("quiz_started", { questionId: question.id, questionIndex: step + 1, totalQuestions: quizQuestions.length, stepKind: "question" });
     void trackFunnel("quiz_question_answered", { questionId: question.id, questionIndex: step + 1, totalQuestions: quizQuestions.length, stepKind: "question" });
     const updated={...answers,[question.id]:value}; setAnswers(updated);
     window.setTimeout(()=>setStep(current=>Math.min(current+1,quizQuestions.length)),180);
@@ -92,6 +101,14 @@ export function QuizExperience() {
 
   return <main className="quiz-shell">
     <header className="quiz-header"><Link href="/" className="brand"><span className="brand-mark">V</span><span>Volta Pra <em>Você</em></span></Link><Link href="/" className="quiz-close" aria-label="Sair do diagnóstico">Fechar ×</Link></header>
+    {!started ? <section className="quiz-intro-card">
+      <span className="quiz-intro-tag">Diagnóstico gratuito, individual e privado</span>
+      <h1>Descubra o que está fazendo você se deixar para depois.</h1>
+      <p>Em menos de três minutos, organize seu momento atual e receba uma direção personalizada para voltar a se priorizar sem sobrecarregar sua rotina.</p>
+      <div className="quiz-intro-benefits"><span><b>1</b> Responda sobre sua rotina</span><span><b>2</b> Descubra seu perfil</span><span><b>3</b> Receba seu primeiro plano</span></div>
+      <button className="button quiz-start-button" onClick={startQuiz}>Quero entender meu momento</button>
+      <small>Sem respostas certas ou erradas. Seus dados ficam protegidos.</small>
+    </section> : <>
     <div className="quiz-progress-wrap"><div className="quiz-progress-copy"><span>{isLead?"Quase pronto":`Pergunta ${step+1} de ${quizQuestions.length}`}</span><strong>{progress}%</strong></div><div className="progress-bar"><i style={{width:`${isLead?100:progress}%`}}/></div></div>
     {!isLead ? <section className="quiz-card" key={question.id}>
       <span className="quiz-kicker">Responda pensando na sua rotina das últimas semanas</span>
@@ -110,6 +127,6 @@ export function QuizExperience() {
         <button className="button" disabled={submitting}>{submitting?"Preparando seu resultado…":"Ver meu diagnóstico completo"}</button>
       </form>
       <div className="quiz-foot"><button className="text-button" onClick={()=>setStep(quizQuestions.length-1)}>← Revisar última pergunta</button><p>🔒 Seus dados são protegidos.</p></div>
-    </section>}
+    </section>}</>}
   </main>;
 }

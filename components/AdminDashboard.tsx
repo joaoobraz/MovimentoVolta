@@ -1,5 +1,5 @@
 "use client";
-/* eslint-disable react-hooks/set-state-in-effect, jsx-a11y/label-has-associated-control */
+/* eslint-disable react-hooks/set-state-in-effect, react-hooks/exhaustive-deps, jsx-a11y/label-has-associated-control */
 
 import { SafeLink as Link } from "@/components/SafeLink";
 import { FormEvent, useEffect, useMemo, useState } from "react";
@@ -13,15 +13,33 @@ type Readiness = { productionMode: boolean; emailConfigured: boolean; wiapyConfi
 type QuizFunnel = {
   periodDays: number;
   startedAt: string | null;
-  stages: { visitors: number; started: number; leadFormViewed: number; leadFormStarted: number; completed: number; resultViewed: number; checkoutClicked: number; purchases: number };
+  range: { from: string; to: string; effectiveFrom: string };
+  stages: { visitors: number; started: number; leadFormViewed: number; leadFormStarted: number; completed: number; resultViewed: number; offerViewed: number; checkoutClicked: number; purchases: number };
   questions: { questionIndex: number; questionId: string; viewed: number; answered: number; abandoned: number }[];
   lastReached: { questionIndex: number; total: number }[];
   sources: { source: string; total: number }[];
 };
 type AdminData = { viewer: { name: string; email: string }; metrics: Record<string, number>; profiles: Row[]; leads: Row[]; reports: Row[]; products: Product[]; automations: Automation[]; integration: { gateway?: string; supportEmail?: string; whatsapp?: string }; readiness: Readiness; quizFunnel: QuizFunnel };
+type DatePreset = "today" | "yesterday" | "last7" | "currentMonth" | "previousMonth" | "custom";
+type DateSelection = { preset: DatePreset; from: string; to: string };
 
 const sections: [Section, string][] = [["dashboard", "Visão geral"], ["quiz", "Funil do quiz"], ["activation", "Pronto para vender"], ["leads", "Gestão de leads"], ["content", "Conteúdo e produtos"], ["community", "Moderação"], ["access", "Acessos"], ["automation", "Automações"]];
 const automationNames: Record<string, string> = { quiz_abandoned: "Abandono do quiz", diagnosis_complete: "Conclusão do diagnóstico", result_message: "Mensagem com resultado", welcome: "Boas-vindas", mission_reminder: "Lembrete de missão", streak: "Aviso de sequência", day_seven: "Marco de sete dias", journey_invite: "Convite à Jornada", checkout_recovery: "Recuperação de checkout", community_invite: "Convite à comunidade", weekly_report: "Relatório semanal" };
+const periodNames: Record<DatePreset, string> = { today: "Hoje", yesterday: "Ontem", last7: "Últimos 7 dias", currentMonth: "Mês atual", previousMonth: "Mês passado", custom: "Personalizado" };
+
+function inputDate(date: Date) {
+  const year = date.getFullYear(), month = String(date.getMonth() + 1).padStart(2, "0"), day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function presetDates(preset: DatePreset): DateSelection {
+  const today = new Date(), start = new Date(today.getFullYear(), today.getMonth(), today.getDate()), end = new Date(start);
+  if (preset === "yesterday") { start.setDate(start.getDate() - 1); end.setDate(end.getDate() - 1); }
+  if (preset === "last7") start.setDate(start.getDate() - 6);
+  if (preset === "currentMonth") start.setDate(1);
+  if (preset === "previousMonth") { start.setMonth(start.getMonth() - 1, 1); end.setDate(0); }
+  return { preset, from: inputDate(start), to: inputDate(end) };
+}
 
 async function send(body: Row) {
   const response = await fetch("/api/data", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
@@ -31,15 +49,32 @@ async function send(body: Row) {
 }
 
 export function AdminDashboard() {
-  const [section, setSection] = useState<Section>("dashboard"), [data, setData] = useState<AdminData | null>(null), [notice, setNotice] = useState(""), [error, setError] = useState("");
-  async function load() { const response = await fetch("/api/data?mode=admin", { cache: "no-store" }); if (!response.ok) { setError("Esta conta não tem acesso ao painel."); return; } setData(await response.json()); }
-  useEffect(() => { load(); }, []);
+  const initialDates = useMemo(() => presetDates("last7"), []);
+  const [section, setSection] = useState<Section>("dashboard"), [data, setData] = useState<AdminData | null>(null), [notice, setNotice] = useState(""), [error, setError] = useState(""), [dateSelection, setDateSelection] = useState<DateSelection>(initialDates), [loadingPeriod, setLoadingPeriod] = useState(false);
+  async function load(selection: DateSelection = dateSelection) { setLoadingPeriod(true); const query = new URLSearchParams({ mode: "admin", from: selection.from, to: selection.to }); const response = await fetch(`/api/data?${query}`, { cache: "no-store" }); if (!response.ok) { setError("Esta conta não tem acesso ao painel."); setLoadingPeriod(false); return; } setData(await response.json()); setError(""); setLoadingPeriod(false); }
+  useEffect(() => { void load(initialDates); }, []);
   function say(message: string) { setNotice(message); window.setTimeout(() => setNotice(""), 2800); }
-  return <div className="admin-shell"><aside className="admin-sidebar"><Link href="/" className="brand brand-light"><span className="brand-mark">V</span><span>Volta Pra <em>Você</em></span></Link><span className="admin-label">Administração protegida</span><nav>{sections.map(([id, label]) => <button key={id} className={section === id ? "active" : ""} onClick={() => setSection(id)}>{label}</button>)}</nav><Link href="/app">Ver área da cliente →</Link><form action="/api/logout" method="post"><button className="admin-exit" type="submit">Sair</button></form></aside><main className="admin-main"><header><div><span className="eyebrow">Painel administrativo</span><h1>{sections.find(item => item[0] === section)?.[1]}</h1></div>{data && <div className="admin-user"><span>{data.viewer.name.charAt(0)}</span><div><strong>{data.viewer.name}</strong><small>{data.viewer.email}</small></div></div>}</header>{notice && <p className="success-note">{notice}</p>}{error && <p className="form-error">{error}</p>}{!data ? <div className="app-loading"><i/><p>Carregando indicadores…</p></div> : <>{section === "dashboard" && <Dashboard data={data}/>} {section === "quiz" && <QuizAnalytics data={data}/>} {section === "activation" && <Activation data={data}/>} {section === "leads" && <Leads data={data}/>} {section === "content" && <Products data={data} setData={setData} say={say}/>} {section === "community" && <Moderation data={data} reload={load} say={say}/>} {section === "access" && <Access products={data.products} say={say}/>} {section === "automation" && <Automations data={data} setData={setData} say={say}/>}</>}</main></div>;
+  function selectPeriod(preset: DatePreset, from?: string, to?: string) {
+    const next = preset === "custom" ? { preset, from: from || dateSelection.from, to: to || dateSelection.to } : presetDates(preset);
+    setDateSelection(next);
+    if (preset !== "custom") void load(next);
+  }
+  function applyCustom(from: string, to: string) {
+    if (!from || !to || from > to) { setError("Escolha uma data inicial igual ou anterior à data final."); return; }
+    const next: DateSelection = { preset: "custom", from, to };
+    setDateSelection(next); void load(next);
+  }
+  return <div className="admin-shell"><aside className="admin-sidebar"><Link href="/" className="brand brand-light"><span className="brand-mark">V</span><span>Volta Pra <em>Você</em></span></Link><span className="admin-label">Administração protegida</span><nav>{sections.map(([id, label]) => <button key={id} className={section === id ? "active" : ""} onClick={() => setSection(id)}>{label}</button>)}</nav><Link href="/app">Ver área da cliente →</Link><form action="/api/logout" method="post"><button className="admin-exit" type="submit">Sair</button></form></aside><main className="admin-main"><header><div><span className="eyebrow">Painel administrativo</span><h1>{sections.find(item => item[0] === section)?.[1]}</h1></div>{data && <div className="admin-user"><span>{data.viewer.name.charAt(0)}</span><div><strong>{data.viewer.name}</strong><small>{data.viewer.email}</small></div></div>}</header>{data && (section === "dashboard" || section === "quiz") && <DateFilter selection={dateSelection} loading={loadingPeriod} onSelect={selectPeriod} onApply={applyCustom}/>} {notice && <p className="success-note">{notice}</p>}{error && <p className="form-error">{error}</p>}{!data ? <div className="app-loading"><i/><p>Carregando indicadores…</p></div> : <>{section === "dashboard" && <Dashboard data={data}/>} {section === "quiz" && <QuizAnalytics data={data}/>} {section === "activation" && <Activation data={data}/>} {section === "leads" && <Leads data={data}/>} {section === "content" && <Products data={data} setData={setData} say={say}/>} {section === "community" && <Moderation data={data} reload={() => load()} say={say}/>} {section === "access" && <Access products={data.products} say={say}/>} {section === "automation" && <Automations data={data} setData={setData} say={say}/>}</>}</main></div>;
+}
+
+function DateFilter({ selection, loading, onSelect, onApply }: { selection: DateSelection; loading: boolean; onSelect: (preset: DatePreset, from?: string, to?: string) => void; onApply: (from: string, to: string) => void }) {
+  const [from, setFrom] = useState(selection.from), [to, setTo] = useState(selection.to);
+  useEffect(() => { setFrom(selection.from); setTo(selection.to); }, [selection.from, selection.to]);
+  return <section className="admin-date-filter" aria-label="Filtrar métricas por data"><div><span className="eyebrow">Período analisado</span><strong>{periodNames[selection.preset]}</strong>{loading && <small>Atualizando…</small>}</div><div className="date-preset-buttons">{(Object.keys(periodNames) as DatePreset[]).map(preset => <button key={preset} className={selection.preset === preset ? "active" : ""} onClick={() => onSelect(preset)} disabled={loading}>{periodNames[preset]}</button>)}</div>{selection.preset === "custom" && <form className="custom-date-fields" onSubmit={event => { event.preventDefault(); onApply(from, to); }}><label>De<input type="date" value={from} onChange={event => setFrom(event.target.value)}/></label><label>Até<input type="date" value={to} onChange={event => setTo(event.target.value)}/></label><button className="button" disabled={loading}>Aplicar</button></form>}</section>;
 }
 
 function Dashboard({ data }: { data: AdminData }) {
-  const metrics = [["Leads", data.metrics.leads], ["Clientes", data.metrics.users], ["Diagnósticos", data.metrics.quizCompleted], ["Vendas", data.metrics.purchases], ["Receita", `R$ ${Number(data.metrics.revenue).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`], ["Ativas em 7 dias", data.metrics.activeUsers]];
+  const metrics = [["Leads", data.metrics.leads], ["Clientes", data.metrics.users], ["Diagnósticos", data.metrics.quizCompleted], ["Vendas", data.metrics.purchases], ["Receita", `R$ ${Number(data.metrics.revenue).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`], ["Ativas no período", data.metrics.activeUsers]];
   const funnel = [["Quiz iniciado", data.metrics.quizStarted], ["Quiz concluído", data.metrics.quizCompleted], ["Resultado visualizado", data.metrics.resultViewed], ["Checkout acessado", data.metrics.checkoutClicked], ["Compra aprovada", data.metrics.purchases]];
   const maximum = Math.max(1, ...funnel.map(([, value]) => Number(value)));
   return <div className="admin-view"><div className={`readiness-banner ${data.readiness.ready ? "ready" : "pending"}`}><div><strong>{data.readiness.ready ? "Operação pronta para receber vendas" : "A demonstração está pronta; faltam configurações para vender"}</strong><p>{data.readiness.ready ? "Checkout, acesso e comunicação estão conectados." : "Abra “Pronto para vender” e conclua os itens pendentes."}</p></div><button onClick={() => document.querySelector<HTMLButtonElement>('.admin-sidebar button:nth-child(2)')?.click()}>Ver checklist</button></div><div className="metric-grid">{metrics.map(([label, value]) => <article key={String(label)}><span>{label}</span><strong>{value}</strong><small>dados persistentes</small></article>)}</div><div className="admin-charts"><article><div className="section-title-row"><div><span className="eyebrow">Funil</span><h2>Do diagnóstico ao acesso</h2></div><span>Dados reais</span></div>{funnel.map(([label, value]) => <div className="funnel-row" key={String(label)}><span>{label}</span><div><i style={{ width: `${Math.max(5, Number(value) / maximum * 100)}%` }}/></div><strong>{value}</strong></div>)}</article><article><span className="eyebrow">Perfis mais comuns</span><h2>Diagnósticos concluídos</h2>{data.profiles.length ? data.profiles.map((profile, index) => <div className="profile-stat" key={String(profile.profile_key)}><span>{index + 1}</span><p>{String(profile.profile_key || "Sem perfil")}</p><strong>{String(profile.total)}</strong></div>) : <div className="empty-state compact"><p>Os perfis aparecerão após os primeiros diagnósticos.</p></div>}</article></div><div className="admin-note"><strong>Privacidade por padrão</strong><p>O painel não exibe textos do diário privado. Administradores veem apenas métricas e dados operacionais necessários.</p></div></div>;
@@ -47,11 +82,12 @@ function Dashboard({ data }: { data: AdminData }) {
 
 function friendlySource(value: string) {
   const source = value.toLowerCase();
-  if (source === "meta") return "Meta (Facebook/Instagram)";
+  if (source.startsWith("meta")) return "Meta (Facebook/Instagram)";
   if (source.includes("facebook") || source.includes("l.facebook") || source === "fb") return "Facebook";
   if (source.includes("instagram") || source === "ig") return "Instagram";
   if (source.includes("google")) return "Google";
   if (source.includes("direct")) return "Acesso direto";
+  if (source.includes("identificado")) return "Não identificado";
   return value.replace(/^https?:\/\//, "").replace(/\/$/, "").slice(0, 42) || "Acesso direto";
 }
 
@@ -63,19 +99,24 @@ function QuizAnalytics({ data }: { data: AdminData }) {
   const questions = quizQuestions.map((question, index) => ({ question, index: index + 1, ...(details.get(index + 1) || { viewed: 0, answered: 0, abandoned: 0 }), lastReached: finalStops.get(index + 1) || 0 }));
   const stages = [
     ["Abriram /quiz", funnel.stages.visitors, "Sessões únicas no navegador"],
-    ["Começaram", funnel.stages.started, "Responderam a primeira pergunta"],
+    ["Começaram", funnel.stages.started, "Clicaram para iniciar o diagnóstico"],
     ["Chegaram ao cadastro", funnel.stages.leadFormViewed, "Passaram pelas 24 perguntas"],
     ["Iniciaram o cadastro", funnel.stages.leadFormStarted, "Clicaram em algum campo"],
     ["Concluíram", funnel.stages.completed, "Enviaram os dados e o diagnóstico"],
-    ["Viram a oferta", funnel.stages.resultViewed, "Abriram o resultado"],
+    ["Viram o resultado", funnel.stages.resultViewed, "Abriram o diagnóstico personalizado"],
+    ["Chegaram à oferta", funnel.stages.offerViewed, funnel.stages.offerViewed ? "Visualizaram as opções de R$ 17 e R$ 47" : "Medição iniciada nesta atualização"],
     ["Foram ao checkout", funnel.stages.checkoutClicked, "Clicaram para comprar"],
-    ["Pagamentos aprovados", funnel.stages.purchases, "Desde o reinício da medição"],
+    ["Pagamentos aprovados", funnel.stages.purchases, "No período selecionado"],
   ] as const;
   const route = [
     { label: "Entrada do quiz", value: visitors },
+    { label: "Início do diagnóstico", value: funnel.stages.started },
     ...questions.map(item => ({ label: `Pergunta ${item.index}`, value: item.answered })),
     { label: "Cadastro", value: funnel.stages.leadFormViewed },
     { label: "Diagnóstico concluído", value: funnel.stages.completed },
+    { label: "Resultado", value: funnel.stages.resultViewed },
+    ...(funnel.stages.offerViewed > 0 ? [{ label: "Oferta", value: funnel.stages.offerViewed }] : []),
+    { label: "Checkout", value: funnel.stages.checkoutClicked },
   ];
   let biggestDrop: { from: string; to: string; amount: number; rate: number } | null = null;
   for (let index = 1; index < route.length; index += 1) {
@@ -89,8 +130,9 @@ function QuizAnalytics({ data }: { data: AdminData }) {
   const maximumReach = Math.max(1, ...questions.map(item => item.viewed));
   const highestQuestion = [...questions].reverse().find(item => item.viewed > 0);
   const mostCommonStop = questions.reduce<(typeof questions)[number] | null>((current, item) => !current || item.lastReached > current.lastReached ? item : current, null);
+  const rangeLabel = `${new Date(`${funnel.range.from}T12:00:00`).toLocaleDateString("pt-BR")} a ${new Date(`${funnel.range.to}T12:00:00`).toLocaleDateString("pt-BR")}`;
   return <div className="admin-view quiz-analytics-view">
-    <div className="quiz-analytics-intro"><div><span className="eyebrow">Medição detalhada</span><h2>Onde as visitantes param</h2><p>O painel conta etapas e sessões, mas não mostra as respostas pessoais dadas no diagnóstico.</p></div><div><strong>{funnel.startedAt ? new Date(funnel.startedAt).toLocaleString("pt-BR") : "Aguardando a primeira visita"}</strong><span>início desta medição</span></div></div>
+    <div className="quiz-analytics-intro"><div><span className="eyebrow">Medição detalhada</span><h2>Onde as visitantes param</h2><p>O painel conta pessoas e sessões únicas no período escolhido, sem mostrar as respostas pessoais dadas no diagnóstico.</p></div><div><strong>{rangeLabel}</strong><span>período selecionado</span></div></div>
     <div className="quiz-stage-grid">{stages.map(([label, value, note]) => <article key={label}><span>{label}</span><strong>{value}</strong><small>{visitors && label !== "Pagamentos aprovados" ? `${Math.round(Number(value) / visitors * 100)}% das entradas` : note}</small><p>{note}</p></article>)}</div>
     {biggestDrop && visitors > 0 ? <div className="dropoff-alert"><span aria-hidden="true">!</span><div><strong>Maior ponto de saída: {biggestDrop.from} → {biggestDrop.to}</strong><p>{biggestDrop.amount} visitante{biggestDrop.amount === 1 ? "" : "s"} não {biggestDrop.amount === 1 ? "avançou" : "avançaram"} nessa passagem ({biggestDrop.rate}%).</p></div></div> : <div className="dropoff-alert neutral"><span aria-hidden="true">i</span><div><strong>A medição detalhada começou agora</strong><p>Assim que novas pessoas entrarem no anúncio, esta área apontará automaticamente a maior queda.</p></div></div>}
     <section className="quiz-reach-card">
@@ -98,7 +140,7 @@ function QuizAnalytics({ data }: { data: AdminData }) {
       <div className="quiz-reach-summary"><article><span>Maior número alcançado</span><strong>{highestQuestion ? highestQuestion.index : "—"}</strong><small>{highestQuestion ? `${highestQuestion.viewed} chegaram à pergunta ${highestQuestion.index}` : "Aguardando novas visitas"}</small></article><article><span>Último número mais comum</span><strong>{mostCommonStop?.lastReached ? mostCommonStop.index : "—"}</strong><small>{mostCommonStop?.lastReached ? `${mostCommonStop.lastReached} ${mostCommonStop.lastReached === 1 ? "sessão teve" : "sessões tiveram"} esse último registro` : "Aguardando novas visitas"}</small></article></div>
       <div className="quiz-reach-grid">{questions.map(item => { const reachRate = item.viewed / maximumReach * 100; return <article className={item.viewed ? "has-data" : ""} key={`reach-${item.index}`} style={{ "--reach": `${reachRate}%` } as React.CSSProperties}><strong>{item.index}</strong><span>{item.viewed} chegaram</span><small>{item.lastReached} como último registro</small></article>; })}</div>
     </section>
-    <div className="quiz-analytics-layout"><article className="question-funnel-card"><div className="section-title-row"><div><span className="eyebrow">24 perguntas</span><h2>Avanço pergunta por pergunta</h2></div><span>Novo ciclo</span></div><div className="question-funnel-list">{questions.map(item => { const rate = visitors ? Math.round(item.answered / visitors * 100) : 0; return <div className="question-funnel-row" key={item.question.id}><span>{String(item.index).padStart(2, "0")}</span><div><strong>{item.question.text}</strong><small>{item.viewed} chegaram · {item.answered} responderam · {item.lastReached} ficaram nesta como última registrada · {item.abandoned} saídas confirmadas</small><i><b style={{ width: `${Math.min(100, rate)}%` }}/></i></div><em>{rate}%</em></div>; })}</div></article><aside className="source-funnel-card"><span className="eyebrow">Origem</span><h2>De onde chegaram</h2>{funnel.sources.length ? funnel.sources.map(item => <div className="source-funnel-row" key={item.source}><div><strong>{friendlySource(item.source)}</strong><span>{item.total}</span></div><i><b style={{ width: `${item.total / maximumSource * 100}%` }}/></i></div>) : <div className="empty-state compact"><p>As origens aparecerão nas próximas visitas.</p></div>}<div className="historical-funnel-note"><strong>Novo ciclo de medição</strong><p>Todos os indicadores deste painel consideram somente ações ocorridas depois do reinício mostrado acima.</p></div></aside></div>
+    <div className="quiz-analytics-layout"><article className="question-funnel-card"><div className="section-title-row"><div><span className="eyebrow">24 perguntas</span><h2>Avanço pergunta por pergunta</h2></div><span>Período filtrado</span></div><div className="question-funnel-list">{questions.map(item => { const rate = visitors ? Math.round(item.answered / visitors * 100) : 0; return <div className="question-funnel-row" key={item.question.id}><span>{String(item.index).padStart(2, "0")}</span><div><strong>{item.question.text}</strong><small>{item.viewed} chegaram · {item.answered} responderam · {item.lastReached} ficaram nesta como última registrada · {item.abandoned} saídas confirmadas</small><i><b style={{ width: `${Math.min(100, rate)}%` }}/></i></div><em>{rate}%</em></div>; })}</div></article><aside className="source-funnel-card"><span className="eyebrow">Origem</span><h2>De onde chegaram</h2>{funnel.sources.length ? funnel.sources.map(item => <div className="source-funnel-row" key={item.source}><div><strong>{friendlySource(item.source)}</strong><span>{item.total}</span></div><i><b style={{ width: `${item.total / maximumSource * 100}%` }}/></i></div>) : <div className="empty-state compact"><p>As origens aparecerão nas próximas visitas.</p></div>}<div className="historical-funnel-note"><strong>Leitura do período</strong><p>Origens duplicadas são agrupadas e todos os indicadores respeitam as datas selecionadas e o reinício da medição.</p></div></aside></div>
     <div className="admin-note"><strong>Como usar</strong><p>Se a queda acontecer nas primeiras perguntas, ajuste anúncio e abertura. Se ocorrer perto do cadastro, reduza fricção do formulário. Se as clientes chegarem ao resultado e não clicarem, teste oferta, preço e prova.</p></div>
   </div>;
 }
