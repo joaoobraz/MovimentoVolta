@@ -31,7 +31,14 @@ export function QuizExperience() {
   const latestStepRef = useRef({ step: -1, questionId: "intro", stepKind: "intro" });
   const isLead = started && step === quizQuestions.length;
   const question = quizQuestions[Math.min(step, quizQuestions.length - 1)];
-  const progress = Math.round((step / quizQuestions.length) * 100);
+  const progress = isLead ? 100 : Math.round(((step + 1) / quizQuestions.length) * 100);
+  const progressLabel = step < 6
+    ? "Começando seu diagnóstico"
+    : step < 12
+      ? "Entendendo sua rotina"
+      : step < 18
+        ? "Aprofundando seu perfil"
+        : "Finalizando seu diagnóstico";
   const result = useMemo(()=>calculateResult(answers),[answers]);
 
   useEffect(()=>{
@@ -73,7 +80,7 @@ export function QuizExperience() {
 
   function startQuiz() {
     setStarted(true);
-    void trackFunnel("quiz_started", { questionId: "intro", questionIndex: 1, totalQuestions: quizQuestions.length, stepKind: "intro" });
+    void trackFunnel("quiz_started", { questionId: "intro", questionIndex: 0, totalQuestions: quizQuestions.length, stepKind: "intro" });
   }
 
   function choose(value:string) {
@@ -109,7 +116,7 @@ export function QuizExperience() {
       <button className="button quiz-start-button" onClick={startQuiz}>Quero entender meu momento</button>
       <small>Sem respostas certas ou erradas. Seus dados ficam protegidos.</small>
     </section> : <>
-    <div className="quiz-progress-wrap"><div className="quiz-progress-copy"><span>{isLead?"Quase pronto":`Pergunta ${step+1} de ${quizQuestions.length}`}</span><strong>{progress}%</strong></div><div className="progress-bar"><i style={{width:`${isLead?100:progress}%`}}/></div></div>
+    <div className="quiz-progress-wrap"><div className="quiz-progress-copy"><span>{isLead ? "Seu resultado está pronto" : progressLabel}</span><strong>{progress}%</strong></div><div className="progress-bar"><i style={{width:`${progress}%`}}/></div></div>
     {!isLead ? <section className="quiz-card" key={question.id}>
       <span className="quiz-kicker">Responda pensando na sua rotina das últimas semanas</span>
       <h1>{question.text}</h1>
